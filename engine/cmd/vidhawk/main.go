@@ -349,6 +349,14 @@ func cmdHost() error {
 		defer closeFn()
 		be = mgr
 		logger.Printf("in-process engine %s", engine.Version)
+		// Publish the local API too, so a desktop app started later attaches to
+		// this engine instead of spawning a second one with its own job list.
+		if srv, err := api.Start(mgr, config.Dir(), 0); err == nil {
+			defer srv.Close()
+			logger.Printf("local API on 127.0.0.1:%d", srv.Port)
+		} else if !errors.Is(err, api.ErrAlreadyRunning) {
+			logger.Printf("local API unavailable: %v", err)
+		}
 	}
 	return host.Run(ctx, be, os.Stdin, os.Stdout, logger)
 }

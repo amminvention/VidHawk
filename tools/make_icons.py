@@ -36,7 +36,8 @@ def main() -> None:
     if sys.argv[1] == "--ico":
         target = Path(sys.argv[2])
         target.parent.mkdir(parents=True, exist_ok=True)
-        draw(256).save(target, sizes=[(256, 256), (128, 128), (64, 64), (48, 48), (32, 32), (16, 16)])
+        # Classic BMP-encoded entries: the NSIS stub and rcedit choke on PNG-compressed ICO frames.
+        draw(256).save(target, sizes=[(256, 256), (128, 128), (64, 64), (48, 48), (32, 32), (16, 16)], bitmap_format="bmp")
         print(f"wrote {target}")
         return
     if sys.argv[1] == "--png":

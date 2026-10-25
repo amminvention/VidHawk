@@ -66,4 +66,5 @@ jobs:
         with:
           files: |
             desktop/release/*.exe
-            desktop/release/*.yml
+            desktop/release/*.blockmap
+            desktop/release/latest.yml

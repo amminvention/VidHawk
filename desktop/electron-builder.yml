@@ -14,6 +14,9 @@ extraResources:
   - from: resources/tray
     to: tray
     filter: ["**/*"]
+  - from: ../extension
+    to: extension
+    filter: ["**/*", "!tests/**"]
 win:
   target:
     - nsis

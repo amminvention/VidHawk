@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, shell, Tray } from 'electron';
+import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { Sidecar, type Endpoint } from './sidecar';
@@ -16,6 +17,21 @@ function enginePath(): string {
   if (app.isPackaged) return join(process.resourcesPath, 'bin', name);
   const candidates = [join(app.getAppPath(), 'resources', 'bin', name), join(app.getAppPath(), '..', 'engine', 'dist', name)];
   return candidates.find((p) => existsSync(p)) ?? candidates[0];
+}
+
+// Idempotent per-user registration of the native-messaging host (HKCU / dotfiles),
+// so browser integration works no matter how the app was installed or moved.
+function registerBrowserIntegration(): void {
+  const exe = enginePath();
+  if (!existsSync(exe)) return;
+  try {
+    execFile(exe, ['install'], { windowsHide: true, timeout: 15000 }, (err, stdout) => {
+      if (err) console.warn('[integration] vidhawk install failed:', err.message);
+      else console.log('[integration]', String(stdout).split('\n')[0]);
+    });
+  } catch (e) {
+    console.warn('[integration]', (e as Error).message);
+  }
 }
 
 function assetPath(...parts: string[]): string {
@@ -125,6 +141,7 @@ if (!gotLock) {
     ipcMain.handle('app:loginItem:set', (_e, v: boolean) => app.setLoginItemSettings({ openAtLogin: v }));
 
     sidecar.onEndpoint((ep: Endpoint | null) => win?.webContents.send('engine:endpoint', ep));
+    registerBrowserIntegration();
     sidecar.start();
     createWindow();
     createTray();

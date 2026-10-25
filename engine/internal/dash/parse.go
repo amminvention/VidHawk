@@ -19,17 +19,17 @@ var ErrDRM = errors.New("stream is DRM-protected (ContentProtection); cannot be 
 // Rep is a downloadable representation: either a list of segment URLs with an
 // optional init segment, or one single file (SegmentBase / plain BaseURL).
 type Rep struct {
-	ID        string `json:"id"`
-	Kind      string `json:"kind"` // video | audio
-	Bandwidth int    `json:"bandwidth"`
-	Width     int    `json:"width,omitempty"`
-	Height    int    `json:"height,omitempty"`
-	Codecs    string `json:"codecs,omitempty"`
-	Lang      string `json:"lang,omitempty"`
-	Mime      string `json:"mime,omitempty"`
-	InitURL   string `json:"-"`
+	ID        string   `json:"id"`
+	Kind      string   `json:"kind"` // video | audio
+	Bandwidth int      `json:"bandwidth"`
+	Width     int      `json:"width,omitempty"`
+	Height    int      `json:"height,omitempty"`
+	Codecs    string   `json:"codecs,omitempty"`
+	Lang      string   `json:"lang,omitempty"`
+	Mime      string   `json:"mime,omitempty"`
+	InitURL   string   `json:"-"`
 	Segments  []string `json:"-"`
-	SingleURL string `json:"-"`
+	SingleURL string   `json:"-"`
 }
 
 func (r Rep) Label() string {
@@ -93,11 +93,11 @@ type representation struct {
 }
 
 type segmentTemplate struct {
-	Initialization string  `xml:"initialization,attr"`
-	Media          string  `xml:"media,attr"`
-	StartNumber    *int64  `xml:"startNumber,attr"`
-	Timescale      *int64  `xml:"timescale,attr"`
-	Duration       *int64  `xml:"duration,attr"`
+	Initialization string `xml:"initialization,attr"`
+	Media          string `xml:"media,attr"`
+	StartNumber    *int64 `xml:"startNumber,attr"`
+	Timescale      *int64 `xml:"timescale,attr"`
+	Duration       *int64 `xml:"duration,attr"`
 	Timeline       *struct {
 		S []struct {
 			T *int64 `xml:"t,attr"`

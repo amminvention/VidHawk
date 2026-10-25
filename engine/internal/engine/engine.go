@@ -142,8 +142,9 @@ func (t *task) snap() Job {
 }
 
 type persisted struct {
-	Job     Job               `json:"job"`
-	Headers map[string]string `json:"headers,omitempty"`
+	Job      Job               `json:"job"`
+	Headers  map[string]string `json:"headers,omitempty"`
+	OwnerPID int               `json:"ownerPid,omitempty"`
 }
 
 type Manager struct {
@@ -175,6 +176,9 @@ func New(cfg config.Config, st *store.Store) *Manager {
 				continue
 			}
 			if p.Job.Active() {
+				if p.OwnerPID != 0 && p.OwnerPID != os.Getpid() && processAlive(p.OwnerPID) {
+					continue // another live engine owns this job; it will report it through the API
+				}
 				p.Job.Status = StatusPaused
 				p.Job.Detail = "interrupted"
 				p.Job.Speed = 0
@@ -267,7 +271,7 @@ func (m *Manager) persist(t *task) {
 		return
 	}
 	t.mu.Lock()
-	p := persisted{Job: t.job, Headers: t.headers}
+	p := persisted{Job: t.job, Headers: t.headers, OwnerPID: os.Getpid()}
 	t.mu.Unlock()
 	data, err := json.Marshal(p)
 	if err != nil {

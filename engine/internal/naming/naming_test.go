@@ -43,11 +43,11 @@ func TestSanitize(t *testing.T) {
 
 func TestContentDisposition(t *testing.T) {
 	cases := map[string]string{
-		`attachment; filename="report.pdf"`:                   "report.pdf",
-		`attachment; filename*=UTF-8''na%C3%AFve%20file.zip`:  "naïve file.zip",
-		`inline; filename=plain.mp4`:                          "plain.mp4",
-		`attachment; filename="..\\evil.exe"`:                 ".._evil.exe",
-		``:                                                    "",
+		`attachment; filename="report.pdf"`:                  "report.pdf",
+		`attachment; filename*=UTF-8''na%C3%AFve%20file.zip`: "naïve file.zip",
+		`inline; filename=plain.mp4`:                         "plain.mp4",
+		`attachment; filename="..\\evil.exe"`:                ".._evil.exe",
+		``:                                                   "",
 	}
 	for h, want := range cases {
 		if got := ContentDispositionFilename(h); got != want {
