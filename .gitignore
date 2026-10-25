@@ -1,0 +1,23 @@
+# engine
+engine/dist/
+engine/*.exe
+engine/.vidhawk/
+
+# desktop
+desktop/resources/bin/*
+!desktop/resources/bin/.gitkeep
+desktop/node_modules/
+desktop/dist/
+desktop/out/
+desktop/release/
+desktop/.vite/
+
+# tooling
+node_modules/
+__pycache__/
+*.pyc
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
+.idea/

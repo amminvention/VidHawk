@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>VidHawk</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+    <symbol id="i-hawk" viewBox="0 0 128 128"><path fill="currentColor" d="M10 46 64 72l54-26-14 12-40 32-40-32Z"/><path fill="currentColor" d="M64 72 54 50h20Z"/><path fill="#fff" d="M58 86h12v16H58z"/><path fill="#fff" d="M44 100h40l-20 20z"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="m7 4 13 8-13 8V4Z"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 5 5L20 7"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 9v4m0 4h.01M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z"/></symbol>
+    <symbol id="i-film" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4M3 15h4M17 9h4M17 15h4"/></symbol>
+    <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 18V6l11-2v12"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z"/><path d="M14 3v5h5"/></symbol>
+    <symbol id="i-magnet" viewBox="0 0 24 24"><path d="M6 3v8a6 6 0 0 0 12 0V3M6 3h4v8a2 2 0 0 0 4 0V3h4"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></symbol>
+    <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/></symbol>
+  </svg>
+
+  <header class="top">
+    <div class="brand">
+      <svg class="brand-mark" aria-hidden="true"><use href="#i-hawk"/></svg>
+      <span class="brand-name">VidHawk</span>
+    </div>
+    <button id="engineBtn" class="engine" type="button" title="Engine status — click to retry">
+      <span class="dot" id="engineDot" aria-hidden="true"></span>
+      <span id="engineText">Connecting…</span>
+    </button>
+  </header>
+
+  <div id="engineBanner" class="banner" hidden>
+    <svg aria-hidden="true"><use href="#i-alert"/></svg>
+    <div>
+      <strong>Engine not reachable.</strong>
+      <span id="engineError"></span>
+      Run <code>vidhawk install</code> once, then click retry.
+    </div>
+  </div>
+
+  <main>
+    <section class="section" aria-labelledby="mediaHead">
+      <div class="section-head">
+        <h2 id="mediaHead">On this page</h2>
+        <span class="count" id="mediaCount" aria-live="polite"></span>
+      </div>
+      <ul id="mediaList" class="list" aria-label="Detected media"></ul>
+      <details id="staleWrap" class="stale" hidden>
+        <summary>Earlier on this tab</summary>
+        <ul id="staleList" class="list"></ul>
+      </details>
+      <p id="segmentsNote" class="note" hidden></p>
+      <div id="mediaEmpty" class="empty">
+        <svg aria-hidden="true"><use href="#i-film"/></svg>
+        <p>Nothing caught yet. Play the video, or reload the page with VidHawk open.</p>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="jobsHead">
+      <div class="section-head">
+        <h2 id="jobsHead">Downloads</h2>
+        <button id="clearDone" class="link" type="button">Clear finished</button>
+      </div>
+      <ul id="jobList" class="list" aria-label="Downloads" aria-live="polite"></ul>
+      <p id="jobsEmpty" class="empty-line">No downloads yet.</p>
+    </section>
+  </main>
+
+  <footer>
+    <form id="addForm" class="add">
+      <label class="sr-only" for="addUrl">URL, magnet link or .torrent</label>
+      <input id="addUrl" type="text" autocomplete="off" spellcheck="false" placeholder="Paste a URL, magnet: link or .torrent" />
+      <button type="submit" class="btn primary" title="Add download">
+        <svg aria-hidden="true"><use href="#i-download"/></svg><span>Add</span>
+      </button>
+    </form>
+    <div class="footer-row">
+      <button id="pageYtdlp" class="btn ghost" type="button" title="Hand the current page to yt-dlp (for sites that hide their streams)">
+        <svg aria-hidden="true"><use href="#i-layers"/></svg><span>Grab page via yt-dlp</span>
+      </button>
+      <label class="toggle" title="Cancel the browser's own download of media and archives and send it to VidHawk">
+        <input type="checkbox" id="takeOver" />
+        <span>Take over downloads</span>
+      </label>
+    </div>
+  </footer>
+
+  <template id="mediaItemTpl">
+    <li class="card media">
+      <div class="row">
+        <span class="kind" data-role="kind"></span>
+        <input class="name" data-role="name" type="text" spellcheck="false" aria-label="File name" />
+      </div>
+      <div class="meta" data-role="meta"></div>
+      <div class="row actions">
+        <select class="quality" data-role="quality" aria-label="Quality" hidden></select>
+        <span class="probe" data-role="probe" hidden></span>
+        <span class="spacer"></span>
+        <button class="icon" data-action="copy" type="button" title="Copy URL" aria-label="Copy URL"><svg aria-hidden="true"><use href="#i-copy"/></svg></button>
+        <button class="icon" data-action="remove" type="button" title="Hide" aria-label="Hide this item"><svg aria-hidden="true"><use href="#i-x"/></svg></button>
+        <button class="btn primary" data-action="download" type="button"><svg aria-hidden="true"><use href="#i-download"/></svg><span>Download</span></button>
+      </div>
+    </li>
+  </template>
+
+  <template id="jobItemTpl">
+    <li class="card job">
+      <div class="row">
+        <span class="status" data-role="status"></span>
+        <span class="title" data-role="title"></span>
+      </div>
+      <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" data-role="bar"><div class="fill" data-role="fill"></div></div>
+      <div class="row">
+        <span class="meta" data-role="meta"></span>
+        <span class="spacer"></span>
+        <button class="icon" data-action="pause" type="button" title="Pause" aria-label="Pause"><svg aria-hidden="true"><use href="#i-pause"/></svg></button>
+        <button class="icon" data-action="resume" type="button" title="Resume" aria-label="Resume"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
+        <button class="icon" data-action="cancel" type="button" title="Cancel" aria-label="Cancel"><svg aria-hidden="true"><use href="#i-x"/></svg></button>
+        <button class="icon" data-action="open" type="button" title="Show in folder" aria-label="Show in folder"><svg aria-hidden="true"><use href="#i-folder"/></svg></button>
+        <button class="icon" data-action="remove" type="button" title="Remove from list" aria-label="Remove from list"><svg aria-hidden="true"><use href="#i-trash"/></svg></button>
+      </div>
+      <p class="error" data-role="error" hidden></p>
+    </li>
+  </template>
+
+  <script src="lib/naming.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

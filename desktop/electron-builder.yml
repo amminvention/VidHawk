@@ -1,0 +1,33 @@
+appId: io.amminvention.vidhawk
+productName: VidHawk
+copyright: Copyright © 2026 AMM Invention
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**
+  - package.json
+extraResources:
+  - from: resources/bin
+    to: bin
+    filter: ["**/*"]
+  - from: resources/tray
+    to: tray
+    filter: ["**/*"]
+win:
+  target:
+    - nsis
+  icon: build/icon.ico
+  artifactName: VidHawk-Setup-${version}.${ext}
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  include: build/installer.nsh
+  shortcutName: VidHawk
+protocols:
+  - name: Magnet link
+    schemes: [magnet]
+fileAssociations:
+  - ext: torrent
+    name: BitTorrent file
+    mimeType: application/x-bittorrent
