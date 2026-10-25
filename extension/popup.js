@@ -175,19 +175,24 @@
     uniqueNames(live);
     uniqueNames(stale);
     const shown = showAll ? live : live.slice(0, SHOW_LIMIT);
-    mediaList.replaceChildren(...shown.map(renderItem));
+    syncCards(mediaList, shown);
+    let more = mediaList.querySelector(':scope > li.more');
     if (live.length > SHOW_LIMIT) {
-      const more = document.createElement('li');
-      more.className = 'more';
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'link';
-      btn.textContent = showAll ? 'Show fewer' : `Show all ${live.length} streams on this page`;
-      btn.addEventListener('click', () => { showAll = !showAll; renderMedia(); });
-      more.appendChild(btn);
+      if (!more) {
+        more = document.createElement('li');
+        more.className = 'more';
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'link';
+        btn.addEventListener('click', () => { showAll = !showAll; renderMedia(); });
+        more.appendChild(btn);
+      }
+      more.firstElementChild.textContent = showAll ? 'Show fewer' : `Show all ${live.length} streams on this page`;
       mediaList.appendChild(more);
+    } else if (more) {
+      more.remove();
     }
-    staleList.replaceChildren(...stale.map(renderItem));
+    syncCards(staleList, stale);
     $('#staleWrap').hidden = stale.length === 0;
     $('#mediaEmpty').hidden = live.length > 0 || stale.length > 0;
     $('#mediaCount').textContent = live.length ? String(live.length) : '';
@@ -210,17 +215,52 @@
     autoProbe(live);
   }
 
-  function renderItem(item) {
+  // Cards are keyed by item id and updated in place, so state changes arriving
+  // every few hundred milliseconds never destroy the card the user is using.
+  function syncCards(container, items) {
+    const existing = new Map([...container.querySelectorAll(':scope > li.card')].map((n) => [n.dataset.key, n]));
+    const nodes = items.map((item) => {
+      let node = existing.get(item.id);
+      if (node) existing.delete(item.id);
+      else node = createItem(item);
+      updateItem(node, item);
+      return node;
+    });
+    for (const gone of existing.values()) gone.remove();
+    const current = [...container.querySelectorAll(':scope > li.card')];
+    const sameOrder = current.length === nodes.length && current.every((n, i) => n === nodes[i]);
+    if (!sameOrder && !container.contains(document.activeElement)) {
+      for (const n of nodes) container.appendChild(n);
+    } else {
+      for (const n of nodes) if (!n.isConnected) container.appendChild(n);
+    }
+  }
+
+  function createItem(item) {
     const node = mediaTpl.content.firstElementChild.cloneNode(true);
     node.dataset.key = item.id;
+    node._item = item;
+    const name = $('[data-role="name"]', node);
+    name.addEventListener('input', () => names.set(node._item.id, name.value));
+    const quality = $('[data-role="quality"]', node);
+    quality.addEventListener('change', () => qualities.set(node._item.id, quality.value));
+    const opt = wireOptions(node, item, name);
+    $('[data-action="download"]', node).addEventListener('click', () => download(node._item, name.value, quality.hidden ? 'best' : quality.value, opt));
+    $('[data-action="copy"]', node).addEventListener('click', async () => { await navigator.clipboard.writeText(node._item.url); toast('URL copied'); });
+    $('[data-action="remove"]', node).addEventListener('click', async () => { await bg('remove-item', { tabId, key: node._item.id }); refresh(); });
+    return node;
+  }
+
+  function updateItem(node, item) {
+    node._item = item;
     const kind = $('[data-role="kind"]', node);
     kind.textContent = kindLabel(item);
     kind.className = `kind ${item.kind}${item.verified === false ? ' api' : ''}${item.id === aiPick ? ' ai-pick' : ''}`;
     kind.title = item.id === aiPick ? 'Picked by the on-device model' : item.source === 'api' ? 'Found inside an API response (unverified)' : `Detected via ${item.source || 'network'}`;
 
     const name = $('[data-role="name"]', node);
-    name.value = names.get(item.id) ?? suggested.get(item.id) ?? VidHawkNaming.suggestName(item, data.tab.meta, tabUrl);
-    name.addEventListener('input', () => names.set(item.id, name.value));
+    const wanted = names.get(item.id) ?? suggested.get(item.id) ?? VidHawkNaming.suggestName(item, data.tab.meta, tabUrl);
+    if (document.activeElement !== name && name.value !== wanted) name.value = wanted;
 
     const meta = $('[data-role="meta"]', node);
     const parts = [];
@@ -236,30 +276,26 @@
       if (p.audio?.length > 1) parts.push(`<span class="sep"></span><span>${p.audio.length} audio tracks</span>`);
     }
     if (item.seen > 1) parts.push(`<span class="sep"></span><span>seen ×${item.seen}</span>`);
-    meta.innerHTML = parts.join('');
+    const metaHtml = parts.join('');
+    if (node._metaHtml !== metaHtml) { meta.innerHTML = metaHtml; node._metaHtml = metaHtml; }
 
     const quality = $('[data-role="quality"]', node);
     const variants = p?.variants || [];
-    if (variants.length) {
+    const sig = variants.map((v) => v.label).join('|');
+    if (variants.length && node._variantSig !== sig) {
+      node._variantSig = sig;
       quality.hidden = false;
       quality.replaceChildren(
         option('best', `Best (${variants[0].label || 'auto'})`),
         ...variants.map((v) => option(String(v.height || v.label), `${v.label}${v.width ? ` · ${v.width}×${v.height}` : ''}${v.bandwidth ? ` · ${Math.round(v.bandwidth / 1000)} kbps` : ''}`)),
       );
       quality.value = qualities.get(item.id) || 'best';
-      quality.addEventListener('change', () => qualities.set(item.id, quality.value));
     }
     const probe = $('[data-role="probe"]', node);
     probe.hidden = !probing.has(item.id);
     probe.textContent = 'Reading stream…';
-
-    const opt = wireOptions(node, item, name);
-    const dl = $('[data-action="download"]', node);
-    dl.disabled = !data.engine.connected || !!p?.drm;
-    dl.addEventListener('click', () => download(item, name.value, quality.hidden ? 'best' : quality.value, opt));
-    $('[data-action="copy"]', node).addEventListener('click', async () => { await navigator.clipboard.writeText(item.url); toast('URL copied'); });
-    $('[data-action="remove"]', node).addEventListener('click', async () => { await bg('remove-item', { tabId, key: item.id }); refresh(); });
-    return node;
+    $('[data-action="download"]', node).disabled = !data.engine.connected || !!p?.drm;
+    $('[data-role="folder"]', node).placeholder = defaultFolder() || 'Default folder';
   }
 
   function option(value, label) {
@@ -396,7 +432,9 @@
     $('#relatedToggle').setAttribute('aria-expanded', String(relatedOpen));
     const selectMode = $('#relatedSelectMode').checked;
     const statusByHref = new Map((batch?.items || []).map((i) => [i.href, i]));
-    list.replaceChildren(...entries.map((e) => {
+    // Rebuild the rows only when something visible changed; checkbox state lives in relatedSelected.
+    const sig = JSON.stringify([selectMode, entries.map((e) => [e.href, e.text, statusByHref.get(e.href)?.status || ''])]);
+    if (list._sig !== sig) list._sig = sig, list.replaceChildren(...entries.map((e) => {
       const li = document.createElement('li');
       if (selectMode) {
         const cb = document.createElement('input');
@@ -477,6 +515,9 @@
     section.hidden = recent.length === 0;
     $('#recentCount').textContent = recent.length ? String(recent.length) : '';
     const list = $('#recentList');
+    const sig = JSON.stringify([data.engine.connected, recent.map((d) => [d.url, d.filename, d.size, d.mime])]);
+    if (list._sig === sig) return;
+    list._sig = sig;
     list.replaceChildren(...recent.map((d) => {
       const node = mediaTpl.content.firstElementChild.cloneNode(true);
       const ext = VidHawkNaming.fileNameFromUrl(d.filename || '').split('.').pop();
@@ -512,14 +553,60 @@
       const act = (j) => (j.status === 'running' || j.status === 'queued' ? 0 : 1);
       return act(a) - act(b) || b.created - a.created;
     });
-    jobList.replaceChildren(...jobs.slice(0, 30).map(renderJob));
+    const shown = jobs.slice(0, 30);
+    const existing = new Map([...jobList.children].map((n) => [n.dataset.key, n]));
+    const nodes = shown.map((j) => {
+      let node = existing.get(j.id);
+      if (node) existing.delete(j.id);
+      else node = createJob(j);
+      updateJob(node, j);
+      return node;
+    });
+    for (const gone of existing.values()) gone.remove();
+    const current = [...jobList.children];
+    const sameOrder = current.length === nodes.length && current.every((n, i) => n === nodes[i]);
+    if (!sameOrder && !jobList.contains(document.activeElement)) {
+      for (const n of nodes) jobList.appendChild(n);
+    } else {
+      for (const n of nodes) if (!n.isConnected) jobList.appendChild(n);
+    }
     $('#jobsEmpty').hidden = jobs.length > 0;
     $('#clearDone').hidden = !jobs.some((j) => j.status !== 'running' && j.status !== 'queued');
   }
 
-  function renderJob(j) {
+  function createJob(j) {
     const node = jobTpl.content.firstElementChild.cloneNode(true);
-    node.classList.add(j.status);
+    node.dataset.key = j.id;
+    node._job = j;
+    for (const action of ['pause', 'resume', 'cancel']) {
+      $(`[data-action="${action}"]`, node).addEventListener('click', async () => {
+        try { await bg('job-action', { action, jobId: node._job.id }); } catch (e) { toast(e.message); }
+        refresh();
+      });
+    }
+    const confirm = $('[data-role="confirm"]', node);
+    $('[data-action="remove"]', node).classList.add('danger');
+    $('[data-action="remove"]', node).addEventListener('click', () => {
+      // Nothing on disk yet (or a failed job): a plain remove is enough.
+      if (!node._job.path) { bg('job-action', { action: 'remove', jobId: node._job.id }).then(refresh, (e) => toast(e.message)); return; }
+      confirm.hidden = !confirm.hidden;
+    });
+    $('[data-action="remove-list"]', node).addEventListener('click', async () => {
+      try { await bg('job-action', { action: 'remove', jobId: node._job.id }); } catch (e) { toast(e.message); }
+      refresh();
+    });
+    $('[data-action="remove-file"]', node).addEventListener('click', async () => {
+      try { await bg('job-action', { action: 'remove', jobId: node._job.id, deleteFile: true }); toast('File deleted'); } catch (e) { toast(e.message); }
+      refresh();
+    });
+    $('[data-action="open"]', node).addEventListener('click', () => bg('open', { path: node._job.path }).catch((e) => toast(e.message)));
+    return node;
+  }
+
+  function updateJob(node, j) {
+    node._job = j;
+    const pct = j.total > 0 ? Math.min(100, j.percent || (j.done / j.total) * 100) : null;
+    node.className = `card job ${j.status}${pct == null && j.status === 'running' ? ' indeterminate' : ''}`;
     const status = $('[data-role="status"]', node);
     status.textContent = j.status;
     status.className = `status ${j.status}`;
@@ -528,8 +615,6 @@
     title.title = j.path || j.url;
 
     const bar = $('[data-role="bar"]', node);
-    const pct = j.total > 0 ? Math.min(100, j.percent || (j.done / j.total) * 100) : null;
-    if (pct == null && j.status === 'running') node.classList.add('indeterminate');
     bar.setAttribute('aria-valuenow', pct == null ? 0 : Math.round(pct));
     bar.setAttribute('aria-label', `${j.title || 'download'} progress`);
     $('[data-role="fill"]', node).style.width = `${pct ?? (j.status === 'done' ? 100 : 0)}%`;
@@ -555,32 +640,10 @@
     $('[data-action="cancel"]', node).hidden = !active;
     $('[data-action="open"]', node).hidden = !(j.status === 'done' && j.path);
     $('[data-action="remove"]', node).hidden = active;
-    $('[data-action="remove"]', node).classList.add('danger');
-    for (const action of ['pause', 'resume', 'cancel']) {
-      $(`[data-action="${action}"]`, node).addEventListener('click', async () => {
-        try { await bg('job-action', { action, jobId: j.id }); } catch (e) { toast(e.message); }
-        refresh();
-      });
-    }
-    const confirm = $('[data-role="confirm"]', node);
-    $('[data-action="remove"]', node).addEventListener('click', () => {
-      // Nothing on disk yet (or a failed job): a plain remove is enough.
-      if (!j.path) { bg('job-action', { action: 'remove', jobId: j.id }).then(refresh, (e) => toast(e.message)); return; }
-      confirm.hidden = !confirm.hidden;
-    });
-    $('[data-action="remove-list"]', node).addEventListener('click', async () => {
-      try { await bg('job-action', { action: 'remove', jobId: j.id }); } catch (e) { toast(e.message); }
-      refresh();
-    });
-    $('[data-action="remove-file"]', node).addEventListener('click', async () => {
-      try { await bg('job-action', { action: 'remove', jobId: j.id, deleteFile: true }); toast('File deleted'); } catch (e) { toast(e.message); }
-      refresh();
-    });
-    $('[data-action="open"]', node).addEventListener('click', () => bg('open', { path: j.path }).catch((e) => toast(e.message)));
+    if (active) $('[data-role="confirm"]', node).hidden = true;
     const err = $('[data-role="error"]', node);
     err.hidden = !j.error;
     err.textContent = friendlyError(j);
-    return node;
   }
 
   function friendlyError(j) {
@@ -652,7 +715,7 @@
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg?.type === 'state-changed') {
       clearTimeout(refresh.t);
-      refresh.t = setTimeout(() => refresh().catch(() => {}), 120);
+      refresh.t = setTimeout(() => refresh().catch(() => {}), 250);
     }
   });
 
