@@ -33,6 +33,16 @@
   }
 
   let lastMeta = '';
+  function playerState() {
+    const els = [...document.querySelectorAll('video, audio')];
+    const frames = document.querySelectorAll('iframe').length;
+    return {
+      players: els.length,
+      playing: els.some((v) => !v.paused && !v.ended && v.readyState > 2),
+      loaded: els.some((v) => v.readyState > 0 || !!(v.currentSrc || v.src)),
+      frames,
+    };
+  }
   function snapshotMeta() {
     return {
       title: document.title || '',
@@ -41,6 +51,7 @@
       ld: ldTitle(),
       h1: (q('h1')?.innerText || '').trim().slice(0, 200),
       url: location.href,
+      player: playerState(),
     };
   }
   function reportMeta() {

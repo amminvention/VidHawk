@@ -24,8 +24,8 @@
     "preact": "^10.24.3"
   },
   "devDependencies": {
-    "@fontsource/ibm-plex-sans": "^5.1.0",
     "@fontsource/jetbrains-mono": "^5.1.1",
+    "@fontsource/space-grotesk": "^5.1.0",
     "@preact/preset-vite": "^2.9.1",
     "@types/node": "^22.9.0",
     "electron": "^33.2.1",

@@ -121,6 +121,14 @@
     $('#staleWrap').hidden = stale.length === 0;
     $('#mediaEmpty').hidden = live.length > 0 || stale.length > 0;
     $('#mediaCount').textContent = live.length ? String(live.length) : '';
+    const player = tab.meta?.player;
+    const emptyText = $('#mediaEmpty p');
+    if (emptyText) {
+      if (player?.players > 0 && !player.loaded) emptyText.textContent = 'A video player is on this page but has not started. Press Play, then reopen VidHawk — the stream is caught the moment the player requests it.';
+      else if (player?.players > 0) emptyText.textContent = 'The player is active but its media has not been requested yet. Let it play a few seconds, then reopen VidHawk.';
+      else if (player?.frames > 0) emptyText.textContent = 'No media caught yet. The video may live inside an embedded frame — press Play on it, then reopen VidHawk.';
+      else emptyText.textContent = 'Nothing caught yet. Play the video, or reload the page with VidHawk open.';
+    }
     const seg = tab.segments;
     const note = $('#segmentsNote');
     if (seg && seg.count >= 3 && !live.some(isStream)) {
@@ -278,8 +286,19 @@
     $('[data-action="open"]', node).addEventListener('click', () => bg('open', { path: j.path }).catch((e) => toast(e.message)));
     const err = $('[data-role="error"]', node);
     err.hidden = !j.error;
-    err.textContent = j.error || '';
+    err.textContent = friendlyError(j);
     return node;
+  }
+
+  function friendlyError(j) {
+    const e = j.error || '';
+    if (!e) return '';
+    if (/Unsupported URL/i.test(e)) return 'yt-dlp has no extractor for this site. Press Play on the page instead — VidHawk catches the stream directly once the player requests it.';
+    if (/DRM|SAMPLE-AES|ContentProtection/i.test(e)) return 'This stream is DRM-protected and cannot be downloaded.';
+    if (/HTTP 403/i.test(e)) return 'The server refused the request (403). The link may be bound to your browser session — try downloading from the page while it is open.';
+    if (/HTTP 404|HTTP 410/i.test(e)) return 'The link has expired or no longer exists (404). Reload the page and catch it again.';
+    if (/yt-dlp is not installed/i.test(e)) return 'yt-dlp is not installed. Install it (pip install yt-dlp) to use page downloads.';
+    return e.replace(/^yt-dlp failed: exit status \d+: /, 'yt-dlp: ').slice(0, 400);
   }
 
   // ---------------------------------------------------------------- wiring

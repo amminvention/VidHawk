@@ -61,7 +61,7 @@ function createWindow(): void {
     },
   });
   win.once('ready-to-show', () => {
-    showWindow();
+    if (!process.env.VIDHAWK_HIDDEN) showWindow();
     for (const u of pendingUrls.splice(0)) win?.webContents.send('add-url', u);
   });
   win.on('close', (e) => {

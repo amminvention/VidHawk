@@ -13,6 +13,29 @@
 
 ---
 
+## Theme v0.2 — "Neon Glass" (current)
+
+Supersedes the colour and typography tokens below while keeping the spacing/density, motion and accessibility rules.
+
+| Token | Value | Use |
+|---|---|---|
+| `--bg-0` / `--bg-1` | `#05070d` / `#0a0f1c` | page gradient base (radial indigo/cyan washes on top, faint 24–28px grid overlay) |
+| `--glass` / `--glass-2` | `rgba(16,24,44,.72–.78)` / `rgba(24,34,62,.85)` | panels, cards (backdrop-filter blur 14–16px) |
+| `--field` | `rgba(5,8,16,.65)` | inputs, chips |
+| `--line` / `--line-strong` | `rgba(120,160,255,.16)` / `rgba(140,200,255,.38)` | borders / hover borders |
+| `--fg` / `--fg-muted` / `--fg-dim` | `#e8f0ff` / `#93a4c3` / `#6b7c9c` | text (fg and fg-muted ≥ 4.5:1 on all surfaces) |
+| `--cyan` (accent) | `#22d3ee` | focus, active nav, LEDs, HLS/DASH chips |
+| `--violet` | `#a78bfa` | torrent, paused/queued |
+| `--lime` / `--amber` / `--red` | `#a3e635` / `#fbbf24` / `#fb7185` | success / warning / error |
+| `--gradient` | `linear-gradient(135deg,#22d3ee,#818cf8 55%,#c084fc)` | primary buttons, progress fill, brand text |
+| `--glow` | `0 0 0 1px rgba(34,211,238,.35), 0 0 22px rgba(34,211,238,.22)` | primary CTA, focused fields |
+| Fonts | Space Grotesk (UI), JetBrains Mono (labels, data, `// ` prefixed headings) | |
+| Motion | 200ms `cubic-bezier(.2,.8,.2,1)`; shimmer on running progress; everything off under `prefers-reduced-motion` | |
+
+Rules: glass surfaces always sit on the gradient background (never flat black); one glowing element per card (the CTA or the LED), never both; mono uppercase with 0.1–0.16em tracking for labels only, never body text.
+
+---
+
 ## Global Rules
 
 ### Color Palette

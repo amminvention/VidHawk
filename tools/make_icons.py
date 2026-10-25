@@ -4,9 +4,9 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-BG = (24, 24, 27)        # zinc-900
-ACCENT = (245, 158, 11)  # amber-500
-LIGHT = (250, 250, 250)
+BG = (10, 15, 28)        # --bg-1 (Neon Glass theme)
+ACCENT = (34, 211, 238)  # --cyan
+LIGHT = (232, 240, 255)  # --fg
 
 # Shapes on a 128x128 grid, drawn 8x oversampled.
 WING = [(10, 46), (64, 72), (118, 46), (104, 58), (64, 90), (24, 58)]

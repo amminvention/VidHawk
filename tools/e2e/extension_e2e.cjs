@@ -65,6 +65,10 @@ async function findTarget(pred, timeoutMs = 30000) {
   if (!sw) throw new Error('extension service worker not found');
   console.log('service worker:', sw.url);
   const swc = await CDP.connect(sw.webSocketDebuggerUrl);
+  for (let i = 0; i < 40; i++) {
+    if (await swc.eval("typeof ping === 'function'").catch(() => false)) break;
+    await sleep(250);
+  }
 
   const engine = await swc.eval('ping().then(e => JSON.stringify(e))');
   console.log('engine:', engine);
