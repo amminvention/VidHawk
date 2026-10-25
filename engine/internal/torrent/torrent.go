@@ -14,6 +14,7 @@ import (
 	analog "github.com/anacrolix/log"
 	"github.com/anacrolix/torrent"
 	"github.com/anacrolix/torrent/metainfo"
+	"github.com/anacrolix/torrent/storage"
 )
 
 type Options struct {
@@ -39,6 +40,11 @@ func Download(ctx context.Context, src string, fetchBytes FetchFunc, opt Options
 	cfg := torrent.NewDefaultClientConfig()
 	cfg.DataDir = opt.DataDir
 	cfg.Seed = opt.Seed
+	// Keep piece bookkeeping in memory: no .torrent.bolt.db next to the download.
+	// Part files (<name>.part) are renamed by the library once the torrent completes.
+	store := storage.NewFileOpts(storage.NewFileClientOpts{ClientBaseDir: opt.DataDir, PieceCompletion: storage.NewMapPieceCompletion()})
+	defer store.Close()
+	cfg.DefaultStorage = store
 	if opt.ListenPort > 0 {
 		cfg.ListenPort = opt.ListenPort
 	}
@@ -96,7 +102,9 @@ gotInfo:
 		if progress != nil {
 			progress(done, total, rate, t.Stats().ActivePeers, t.Name())
 		}
-		if total > 0 && done >= total {
+		// Wait for the library's own completion flag, not just the byte count, so the
+		// last piece is verified and part files are renamed before we return.
+		if t.Complete().Bool() {
 			break
 		}
 		select {
@@ -105,5 +113,12 @@ gotInfo:
 		case <-ticker.C:
 		}
 	}
-	return filepath.Join(opt.DataDir, t.Name()), nil
+	final := filepath.Join(opt.DataDir, t.Name())
+	for i := 0; i < 50; i++ {
+		if _, err := os.Stat(final); err == nil {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return final, nil
 }
