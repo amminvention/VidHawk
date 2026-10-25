@@ -50,6 +50,7 @@
       tw: meta('twitter:title'),
       ld: ldTitle(),
       h1: (q('h1')?.innerText || '').trim().slice(0, 200),
+      h2: (q('h2, [role="heading"]')?.innerText || '').trim().slice(0, 200),
       url: location.href,
       player: playerState(),
     };

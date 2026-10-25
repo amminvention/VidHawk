@@ -25,6 +25,16 @@ func TestPickTitlePrefersStructuredMetadata(t *testing.T) {
 	if got := PickTitle(Meta{Title: "Detail Page"}, "https://aryplus.tv/"); got != "" {
 		t.Fatalf("generic title should be rejected, got %q", got)
 	}
+	// A site-wide slogan in og:title must lose to a specific document title.
+	m = Meta{OG: "Example – Your Streaming Guide", Title: "Some Show (2021) • Example – Your Streaming Guide"}
+	if got := PickTitle(m, "https://example.surf/tv/1"); got != "Some Show (2021)" {
+		t.Fatalf("got %q", got)
+	}
+	// An h1 with season/episode markers beats a bare series title.
+	m = Meta{OG: "Some Show", H1: "Some Show · S1 E1", Title: "Some Show (2021) • Example"}
+	if got := PickTitle(m, "https://example.surf/tv/1"); got != "Some Show - S1 E1" {
+		t.Fatalf("got %q", got)
+	}
 }
 
 func TestSanitize(t *testing.T) {

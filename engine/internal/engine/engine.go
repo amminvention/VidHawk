@@ -119,7 +119,8 @@ type Backend interface {
 	Cancel(id string) error
 	Pause(id string) error
 	Resume(id string) error
-	Remove(id string) error
+	// Remove forgets a job; with deleteFile it also deletes what was downloaded.
+	Remove(id string, deleteFile bool) error
 	Probe(ctx context.Context, rawURL string, headers map[string]string) (*ProbeResult, error)
 	Config() config.Config
 	UpdateConfig(patch map[string]any) (config.Config, error)
@@ -465,12 +466,22 @@ func (m *Manager) Resume(id string) error {
 	return nil
 }
 
-func (m *Manager) Remove(id string) error {
+func (m *Manager) Remove(id string, deleteFile bool) error {
 	t, err := m.lookup(id)
 	if err != nil {
 		return err
 	}
 	_ = m.Cancel(id)
+	if deleteFile {
+		job := t.snap()
+		if job.Active() {
+			// Give the runner a moment to release the file after cancellation.
+			time.Sleep(300 * time.Millisecond)
+		}
+		if err := deleteJobFiles(job); err != nil {
+			return err
+		}
+	}
 	m.mu.Lock()
 	delete(m.tasks, id)
 	for i, o := range m.order {
@@ -493,6 +504,25 @@ func (m *Manager) Remove(id string) error {
 	removed.Status = "removed"
 	for _, fn := range subs {
 		fn(Event{Type: "job", Job: &removed})
+	}
+	return nil
+}
+
+// deleteJobFiles removes the downloaded file (or torrent folder) and any
+// resume state, but only when the path lies inside the job's output folder.
+func deleteJobFiles(job Job) error {
+	if job.Path == "" {
+		return nil
+	}
+	p := filepath.Clean(job.Path)
+	root := filepath.Clean(job.OutDir)
+	rel, err := filepath.Rel(root, p)
+	if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+		return fmt.Errorf("refusing to delete %s: outside the download folder", p)
+	}
+	_ = os.Remove(p + ".vidhawk")
+	if err := os.RemoveAll(p); err != nil {
+		return fmt.Errorf("delete %s: %w", p, err)
 	}
 	return nil
 }

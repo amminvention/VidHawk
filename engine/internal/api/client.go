@@ -114,7 +114,13 @@ func (c *Client) Submit(spec engine.Spec) (engine.Job, error) {
 func (c *Client) Cancel(id string) error { return c.do("POST", "/jobs/"+id+"/cancel", nil, nil) }
 func (c *Client) Pause(id string) error  { return c.do("POST", "/jobs/"+id+"/pause", nil, nil) }
 func (c *Client) Resume(id string) error { return c.do("POST", "/jobs/"+id+"/resume", nil, nil) }
-func (c *Client) Remove(id string) error { return c.do("DELETE", "/jobs/"+id, nil, nil) }
+func (c *Client) Remove(id string, deleteFile bool) error {
+	q := ""
+	if deleteFile {
+		q = "?file=1"
+	}
+	return c.do("DELETE", "/jobs/"+id+q, nil, nil)
+}
 
 func (c *Client) Probe(_ context.Context, rawURL string, headers map[string]string) (*engine.ProbeResult, error) {
 	var res engine.ProbeResult

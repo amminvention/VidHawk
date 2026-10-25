@@ -37,6 +37,7 @@ function details(j: Job): string {
 function Row({ job }: { job: Job }): JSX.Element {
   const active = job.status === 'running' || job.status === 'queued';
   const pct = job.total > 0 ? Math.min(100, job.percent || (job.done / job.total) * 100) : null;
+  const confirming = useSignal(false);
   const act = (fn: () => Promise<unknown>) => () => fn().catch((e: Error) => alert(e.message));
   return (
     <li class={`job ${job.status}`}>
@@ -54,8 +55,16 @@ function Row({ job }: { job: Job }): JSX.Element {
         {(job.status === 'paused' || job.status === 'error' || job.status === 'cancelled') && <IconButton icon="play" label="Resume" onClick={act(() => api.resume(job.id))} />}
         {active && <IconButton icon="x" label="Cancel" onClick={act(() => api.cancel(job.id))} />}
         {job.status === 'done' && job.path && <IconButton icon="folder" label="Show in folder" onClick={() => window.vidhawk.showItem(job.path!)} />}
-        {!active && <IconButton icon="trash" label="Remove from list" onClick={act(() => api.remove(job.id))} />}
+        {!active && <IconButton icon="trash" label="Remove…" onClick={() => (job.path ? (confirming.value = !confirming.value) : act(() => api.remove(job.id))())} />}
       </div>
+      {confirming.value && (
+        <div class="job-confirm">
+          <span>Remove this download?</span>
+          <span class="spacer" />
+          <Button onClick={act(() => api.remove(job.id))}>From list only</Button>
+          <Button variant="danger" onClick={act(() => api.remove(job.id, true))}>Delete file too</Button>
+        </div>
+      )}
       {job.error && <p class="job-error">{job.error}</p>}
     </li>
   );

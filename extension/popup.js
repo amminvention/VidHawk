@@ -315,12 +315,26 @@
     $('[data-action="open"]', node).hidden = !(j.status === 'done' && j.path);
     $('[data-action="remove"]', node).hidden = active;
     $('[data-action="remove"]', node).classList.add('danger');
-    for (const action of ['pause', 'resume', 'cancel', 'remove']) {
+    for (const action of ['pause', 'resume', 'cancel']) {
       $(`[data-action="${action}"]`, node).addEventListener('click', async () => {
         try { await bg('job-action', { action, jobId: j.id }); } catch (e) { toast(e.message); }
         refresh();
       });
     }
+    const confirm = $('[data-role="confirm"]', node);
+    $('[data-action="remove"]', node).addEventListener('click', () => {
+      // Nothing on disk yet (or a failed job): a plain remove is enough.
+      if (!j.path) { bg('job-action', { action: 'remove', jobId: j.id }).then(refresh, (e) => toast(e.message)); return; }
+      confirm.hidden = !confirm.hidden;
+    });
+    $('[data-action="remove-list"]', node).addEventListener('click', async () => {
+      try { await bg('job-action', { action: 'remove', jobId: j.id }); } catch (e) { toast(e.message); }
+      refresh();
+    });
+    $('[data-action="remove-file"]', node).addEventListener('click', async () => {
+      try { await bg('job-action', { action: 'remove', jobId: j.id, deleteFile: true }); toast('File deleted'); } catch (e) { toast(e.message); }
+      refresh();
+    });
     $('[data-action="open"]', node).addEventListener('click', () => bg('open', { path: j.path }).catch((e) => toast(e.message)));
     const err = $('[data-role="error"]', node);
     err.hidden = !j.error;

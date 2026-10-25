@@ -443,7 +443,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         return r.probe;
       }
       case 'job-action': {
-        await call({ cmd: msg.action, jobId: msg.jobId }, 10000);
+        await call({ cmd: msg.action, jobId: msg.jobId, deleteFile: !!msg.deleteFile }, 10000);
         if (msg.action === 'remove') { delete state.jobs[msg.jobId]; persist(); }
         return true;
       }

@@ -134,7 +134,13 @@
         <button class="icon" data-action="resume" type="button" title="Resume" aria-label="Resume"><svg aria-hidden="true"><use href="#i-play"/></svg></button>
         <button class="icon" data-action="cancel" type="button" title="Cancel" aria-label="Cancel"><svg aria-hidden="true"><use href="#i-x"/></svg></button>
         <button class="icon" data-action="open" type="button" title="Show in folder" aria-label="Show in folder"><svg aria-hidden="true"><use href="#i-folder"/></svg></button>
-        <button class="icon" data-action="remove" type="button" title="Remove from list" aria-label="Remove from list"><svg aria-hidden="true"><use href="#i-trash"/></svg></button>
+        <button class="icon" data-action="remove" type="button" title="Remove…" aria-label="Remove…"><svg aria-hidden="true"><use href="#i-trash"/></svg></button>
+      </div>
+      <div class="row confirm" data-role="confirm" hidden>
+        <span>Remove this download?</span>
+        <span class="spacer"></span>
+        <button class="btn" data-action="remove-list" type="button">From list only</button>
+        <button class="btn danger" data-action="remove-file" type="button">Delete file too</button>
       </div>
       <p class="error" data-role="error" hidden></p>
     </li>

@@ -79,6 +79,11 @@ test('pickTitle prefers structured metadata and rejects generic titles', () => {
   assert.equal(N.pickTitle({ og: 'Dar-E-Nijaat', title: 'Dar-e-nijaat - Detail Page' }, 'https://aryplus.tv/series/x'), 'Dar-E-Nijaat');
   assert.equal(N.pickTitle({ ld: 'Episode 12 – The Finale', og: 'Show' }, 'https://x.tv/'), 'Episode 12 - The Finale');
   assert.equal(N.pickTitle({ title: 'Watch Online' }, 'https://x.tv/'), '');
+  // A site-wide slogan in og:title must lose to a specific document title.
+  assert.equal(N.pickTitle({ og: 'Example – Your Streaming Guide', title: 'Some Show (2021) • Example – Your Streaming Guide' }, 'https://example.surf/tv/1'), 'Some Show (2021)');
+  // A heading (h1 or h2) carrying season/episode markers beats the bare series name and the year-only title.
+  assert.equal(N.pickTitle({ og: 'Example – Your Streaming Guide', h2: 'Some Show · S1 E1', title: 'Some Show (2021) • Example – Your Streaming Guide' }, 'https://example.surf/tv/1'), 'Some Show - S1 E1');
+  assert.equal(N.pickTitle({ og: 'Some Show', h1: 'Some Show · S1 E1', title: 'Some Show (2021) • Example' }, 'https://example.surf/tv/1'), 'Some Show - S1 E1');
 });
 
 test('suggestName builds "Title.ext" per kind', () => {

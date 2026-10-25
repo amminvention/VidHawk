@@ -101,7 +101,7 @@ func handle(ctx context.Context, be engine.Backend, req protocol.Request) reply 
 			return fail(err)
 		}
 	case "remove":
-		if err := be.Remove(req.JobID); err != nil {
+		if err := be.Remove(req.JobID, req.DeleteFile); err != nil {
 			return fail(err)
 		}
 	case "open":

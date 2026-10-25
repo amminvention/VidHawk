@@ -239,6 +239,9 @@ h2::before { content: "// "; color: var(--cyan); }
 .job.indeterminate .fill { width: 30%; animation: slide 1.2s var(--ease) infinite; }
 @keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
 .job .meta { font-family: var(--font-mono); font-size: 11px; }
+.confirm { font-size: 12px; color: var(--fg-muted); }
+.btn.danger { color: var(--red); border-color: rgba(251, 113, 133, 0.45); }
+.btn.danger:hover { background: rgba(251, 113, 133, 0.12); }
 .error { margin: var(--space-1) 0 0; font-size: 12px; color: var(--red); word-break: break-word; }
 
 /* footer */

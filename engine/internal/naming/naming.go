@@ -18,11 +18,16 @@ var (
 	spaceRe   = regexp.MustCompile(`\s+`)
 	genericRe = regexp.MustCompile(`(?i)^(watch|watch online|watch free|detail page|details?|home|homepage|video|videos|player|stream|streaming|online|free|hd|full hd|official( site| website)?|untitled|download|episode|(?:an? )?(?:video|live|online) ?streaming (?:portal|platform|site|service|app)|\d+|[\s\W]*)$`)
 	compactRe = regexp.MustCompile(`[\s._-]+`)
-	sepRe     = regexp.MustCompile(`\s+[-|–—:•·»«/]+\s+`)
-	counterRe = regexp.MustCompile(`^\(\d+\)\s*`)
-	extRe     = regexp.MustCompile(`\.([A-Za-z0-9]{1,5})$`)
-	cdStarRe  = regexp.MustCompile(`(?i)filename\*\s*=\s*(?:utf-8|utf8)''([^;]+)`)
-	cdPlainRe = regexp.MustCompile(`(?i)filename\s*=\s*(?:"([^"]*)"|'([^']*)'|([^;]+))`)
+	// Site slogans that ride along in <title>/og:title and never name the video.
+	boilerplateRe = regexp.MustCompile(`(?i)\b(?:your |the )?(?:video |live |online )?streaming (?:guide|portal|platform|site|service|hub|app)\b|\bwatch (?:movies?|series|tv shows?|anime|online|free|now)\b|\bfree (?:movies?|streaming|download|online)\b|\bonline free\b|\bofficial (?:web)?site\b|\bhome ?page\b|\bstream (?:movies|now|online)\b|\b(?:movies|series) online\b`)
+	episodeRe     = regexp.MustCompile(`(?i)\bs\d{1,2}\s*[ -]?\s*e\d{1,3}\b|\bseason\s*\d|\bepisode\s*\d|\bep\.?\s*\d`)
+	yearRe        = regexp.MustCompile(`\b(?:19|20)\d{2}\b`)
+	wordRe        = regexp.MustCompile(`[\p{L}\p{N}]{3,}`)
+	sepRe         = regexp.MustCompile(`\s+[-|–—:•·»«/]+\s+`)
+	counterRe     = regexp.MustCompile(`^\(\d+\)\s*`)
+	extRe         = regexp.MustCompile(`\.([A-Za-z0-9]{1,5})$`)
+	cdStarRe      = regexp.MustCompile(`(?i)filename\*\s*=\s*(?:utf-8|utf8)''([^;]+)`)
+	cdPlainRe     = regexp.MustCompile(`(?i)filename\s*=\s*(?:"([^"]*)"|'([^']*)'|([^;]+))`)
 )
 
 const maxNameRunes = 150
@@ -60,6 +65,7 @@ type Meta struct {
 	OG    string `json:"og"`
 	TW    string `json:"tw"`
 	H1    string `json:"h1"`
+	H2    string `json:"h2"`
 	Title string `json:"title"`
 }
 
@@ -84,7 +90,7 @@ func siteWords(pageURL string) []string {
 
 func isJunk(part string, words []string) bool {
 	q := strings.ToLower(strings.TrimSpace(spaceRe.ReplaceAllString(part, " ")))
-	if q == "" || genericRe.MatchString(q) {
+	if q == "" || genericRe.MatchString(q) || boilerplateRe.MatchString(q) {
 		return true
 	}
 	compact := compactRe.ReplaceAllString(q, "")
@@ -116,16 +122,40 @@ func CleanTitle(raw, pageURL string) string {
 	return strings.TrimSpace(strings.Join(parts, " - "))
 }
 
-// PickTitle returns the best title from structured metadata first, falling
-// back to the document title last.
+// score rewards distinctive words and year/season/episode markers and
+// penalises site slogans; the source rank only breaks ties, so a specific
+// document title beats a generic og:title.
+func score(c string, rank int) float64 {
+	s := float64(len(wordRe.FindAllString(c, 9)))
+	if s > 8 {
+		s = 8
+	}
+	if episodeRe.MatchString(c) {
+		s += 4
+	}
+	if yearRe.MatchString(c) {
+		s++
+	}
+	if boilerplateRe.MatchString(c) {
+		s -= 6
+	}
+	return s + float64(5-rank)*0.1
+}
+
+// PickTitle returns the best-scoring cleaned candidate among JSON-LD,
+// Open Graph, Twitter, h1 and the document title.
 func PickTitle(m Meta, pageURL string) string {
-	for _, c := range []string{m.LD, m.OG, m.TW, m.H1, m.Title} {
+	best, bestScore := "", -1e9
+	for rank, c := range []string{m.LD, m.OG, m.TW, m.H1, m.H2, m.Title} {
 		t := CleanTitle(c, pageURL)
-		if n := utf8.RuneCountInString(t); n >= 2 && n <= 180 && !genericRe.MatchString(t) {
-			return t
+		if n := utf8.RuneCountInString(t); n < 2 || n > 180 || genericRe.MatchString(t) {
+			continue
+		}
+		if s := score(t, rank); s > bestScore {
+			best, bestScore = t, s
 		}
 	}
-	return ""
+	return best
 }
 
 // Sanitize makes a string safe as a file name on every OS and caps its length.

@@ -203,7 +203,8 @@ func (s *Server) jobAction(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) deleteJob(w http.ResponseWriter, r *http.Request) {
-	if err := s.be.Remove(r.PathValue("id")); err != nil {
+	deleteFile := r.URL.Query().Get("file") == "1" || r.URL.Query().Get("file") == "true"
+	if err := s.be.Remove(r.PathValue("id"), deleteFile); err != nil {
 		writeErr(w, 404, err)
 		return
 	}

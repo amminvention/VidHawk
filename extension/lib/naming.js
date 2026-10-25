@@ -4,6 +4,10 @@
 const VidHawkNaming = (() => {
   const GENERIC = /^(watch|watch online|watch free|detail page|details?|home|homepage|video|videos|player|stream|streaming|online|free|hd|full hd|official( site| website)?|untitled|download|episode|(?:an? )?(?:video|live|online) ?streaming (?:portal|platform|site|service|app)|\d+|[\s\W]*)$/i;
   const SEP = /\s+[-|–—:•·»«\/]+\s+/;
+  // Site slogans that often ride along in <title>/og:title and never name the video.
+  const BOILERPLATE = /\b(?:your |the )?(?:video |live |online )?streaming (?:guide|portal|platform|site|service|hub|app)\b|\bwatch (?:movies?|series|tv shows?|anime|online|free|now)\b|\bfree (?:movies?|streaming|download|online)\b|\bonline free\b|\bofficial (?:web)?site\b|\bhome ?page\b|\bstream (?:movies|now|online)\b|\b(?:movies|series) online\b/i;
+  const EPISODE = /\bs\d{1,2}\s*[ -]?\s*e\d{1,3}\b|\bseason\s*\d|\bepisode\s*\d|\bep\.?\s*\d/i;
+  const YEAR = /\b(?:19|20)\d{2}\b/;
 
   function siteWords(pageUrl) {
     try {
@@ -23,7 +27,7 @@ const VidHawkNaming = (() => {
     const words = siteWords(pageUrl);
     const junk = (p) => {
       const q = p.trim().toLowerCase().replace(/\s+/g, ' ');
-      if (!q || GENERIC.test(q)) return true;
+      if (!q || GENERIC.test(q) || BOILERPLATE.test(q)) return true;
       const compact = q.replace(/[\s._-]+/g, '');
       return words.some((w) => q === w || q === `${w}.com` || q === `${w} tv` || compact === w || compact === `${w}tv` || compact === `${w}com` || (compact.includes(w) && compact.length <= w.length + 8));
     };
@@ -33,13 +37,27 @@ const VidHawkNaming = (() => {
     return parts.join(' - ').trim();
   }
 
-  // meta: { ld, og, tw, h1, title } (all optional strings)
+  // Scores a cleaned candidate: distinctive words, year / season / episode
+  // markers count for it; site slogans count against it. `rank` (0 = JSON-LD …
+  // 4 = document.title) only breaks ties, so a specific <title> beats a
+  // generic og:title.
+  function score(c, rank) {
+    const words = c.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) || [];
+    let s = Math.min(words.length, 8);
+    if (EPISODE.test(c)) s += 4;
+    if (YEAR.test(c)) s += 1;
+    if (BOILERPLATE.test(c)) s -= 6;
+    return s + (5 - rank) * 0.1;
+  }
+
+  // meta: { ld, og, tw, h1, h2, title } (all optional strings)
   function pickTitle(meta, pageUrl) {
     meta = meta || {};
-    const candidates = [meta.ld, meta.og, meta.tw, meta.h1, meta.title]
-      .map((x) => cleanTitle(x, pageUrl))
-      .filter((x) => x && x.length >= 2 && x.length <= 180 && !GENERIC.test(x));
-    return candidates[0] || '';
+    const candidates = [meta.ld, meta.og, meta.tw, meta.h1, meta.h2, meta.title]
+      .map((x, rank) => ({ text: cleanTitle(x, pageUrl), rank }))
+      .filter((c) => c.text && c.text.length >= 2 && c.text.length <= 180 && !GENERIC.test(c.text));
+    if (!candidates.length) return '';
+    return candidates.sort((a, b) => score(b.text, b.rank) - score(a.text, a.rank))[0].text;
   }
 
   function sanitize(name) {

@@ -135,7 +135,7 @@ export const api = {
   cancel: (id: string) => req<Job>('POST', `/jobs/${id}/cancel`),
   pause: (id: string) => req<Job>('POST', `/jobs/${id}/pause`),
   resume: (id: string) => req<Job>('POST', `/jobs/${id}/resume`),
-  remove: (id: string) => req<unknown>('DELETE', `/jobs/${id}`),
+  remove: (id: string, deleteFile = false) => req<unknown>('DELETE', `/jobs/${id}${deleteFile ? '?file=1' : ''}`),
   getConfig: () => req<Config>('GET', '/config'),
   updateConfig: (patch: Record<string, unknown>) => req<Config>('PUT', '/config', patch),
   open: (path: string) => req<unknown>('POST', '/open', { path }),

@@ -34,6 +34,8 @@ type Request struct {
 	Path    string            `json:"path,omitempty"`
 	Set     map[string]any    `json:"set,omitempty"`
 	Size    int64             `json:"expectedSize,omitempty"`
+	// DeleteFile makes "remove" also delete the downloaded file.
+	DeleteFile bool `json:"deleteFile,omitempty"`
 }
 
 // Read decodes one framed message. io.EOF means the peer closed the pipe.
