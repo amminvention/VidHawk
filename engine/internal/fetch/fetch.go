@@ -16,7 +16,8 @@ import (
 
 var forwarded = map[string]bool{
 	"referer": true, "origin": true, "cookie": true, "user-agent": true, "authorization": true,
-	"accept-language": true, "x-requested-with": true,
+	"accept": true, "accept-language": true, "x-requested-with": true,
+	"sec-fetch-dest": true, "sec-fetch-mode": true, "sec-fetch-site": true,
 }
 
 const (

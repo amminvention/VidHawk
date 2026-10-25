@@ -73,7 +73,7 @@ func handle(ctx context.Context, be engine.Backend, req protocol.Request) reply 
 		r["config"] = be.Config()
 	case "download":
 		job, err := be.Submit(engine.Spec{URL: req.URL, Kind: req.Kind, Title: req.Title, Quality: req.Quality,
-			PageURL: req.PageURL, OutDir: req.OutDir, Headers: req.Headers})
+			PageURL: req.PageURL, OutDir: req.OutDir, Headers: req.Headers, ExpectedSize: req.Size})
 		if err != nil {
 			return fail(err)
 		}

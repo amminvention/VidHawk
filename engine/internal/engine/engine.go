@@ -72,6 +72,8 @@ type Job struct {
 	Error   string  `json:"error,omitempty"`
 	Created int64   `json:"created"`
 	Updated int64   `json:"updated"`
+
+	ExpectedSize int64 `json:"expectedSize,omitempty"`
 }
 
 func (j Job) Active() bool { return j.Status == StatusQueued || j.Status == StatusRunning }
@@ -85,6 +87,9 @@ type Spec struct {
 	PageURL string            `json:"pageUrl,omitempty"`
 	OutDir  string            `json:"outDir,omitempty"`
 	Headers map[string]string `json:"headers,omitempty"`
+	// ExpectedSize is what the page announced (Content-Range/Length seen by the
+	// browser); a much smaller answer means an expired or session-bound link.
+	ExpectedSize int64 `json:"expectedSize,omitempty"`
 }
 
 type Event struct {
@@ -328,7 +333,7 @@ func (m *Manager) Submit(spec Spec) (Job, error) {
 	}
 	t := &task{
 		job: Job{ID: newID(), Kind: kind, URL: u, Title: strings.TrimSpace(spec.Title), Quality: quality, PageURL: spec.PageURL,
-			OutDir: outDir, Status: StatusQueued, Unit: "bytes", Created: now, Updated: now},
+			OutDir: outDir, Status: StatusQueued, Unit: "bytes", Created: now, Updated: now, ExpectedSize: spec.ExpectedSize},
 		headers: fetch.Normalize(spec.Headers),
 	}
 	m.mu.Lock()
@@ -620,6 +625,12 @@ func (m *Manager) runFile(ctx context.Context, t *task) error {
 	if err != nil {
 		return err
 	}
+	if ct := strings.ToLower(info.ContentType); strings.HasPrefix(ct, "text/html") && !isHTMLDownload(job.URL, info.Filename) {
+		return errors.New("the server answered with a web page instead of the file — the link has probably expired or is bound to the browser session; reload the page and catch it again")
+	}
+	if job.ExpectedSize > 0 && info.Size > 0 && info.Size < job.ExpectedSize/2 {
+		return fmt.Errorf("the server offered only %d bytes but the page announced %d — the link is expired or bound to the browser session; play the video again and catch it afresh", info.Size, job.ExpectedSize)
+	}
 	dest := job.Path
 	if dest == "" || filepath.Dir(dest) != filepath.Clean(job.OutDir) {
 		name := naming.FileName(job.Title, info.Filename, info.FinalURL, info.ContentType)
@@ -630,9 +641,28 @@ func (m *Manager) runFile(ctx context.Context, t *task) error {
 	t.job.Path = dest
 	t.mu.Unlock()
 	m.emit(t, true)
-	return httpdl.Download(ctx, c, info, dest, httpdl.Options{Connections: cfg.Connections}, func(done, total int64) {
+	if err := httpdl.Download(ctx, c, info, dest, httpdl.Options{Connections: cfg.Connections}, func(done, total int64) {
 		m.report(t, done, total, done, "bytes", nil)
-	})
+	}); err != nil {
+		return err
+	}
+	if fi, err := os.Stat(dest); err == nil {
+		if info.Size > 0 && fi.Size() < info.Size {
+			return fmt.Errorf("incomplete download: got %d of %d bytes — the server cut the transfer short; use Resume to retry", fi.Size(), info.Size)
+		}
+		if job.ExpectedSize > 0 && fi.Size() < job.ExpectedSize/2 {
+			return fmt.Errorf("the server sent only %d bytes but the page announced %d — the link is expired or bound to the browser session; play the video again and catch it afresh", fi.Size(), job.ExpectedSize)
+		}
+	}
+	return nil
+}
+
+func isHTMLDownload(rawURL, cdName string) bool {
+	e := naming.Ext(cdName)
+	if e == "" {
+		e = urlExt(rawURL)
+	}
+	return e == "html" || e == "htm"
 }
 
 func (m *Manager) runHLS(ctx context.Context, t *task) error {

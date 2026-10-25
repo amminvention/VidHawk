@@ -33,6 +33,7 @@ type Request struct {
 	JobID   string            `json:"jobId,omitempty"`
 	Path    string            `json:"path,omitempty"`
 	Set     map[string]any    `json:"set,omitempty"`
+	Size    int64             `json:"expectedSize,omitempty"`
 }
 
 // Read decodes one framed message. io.EOF means the peer closed the pipe.

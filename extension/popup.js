@@ -221,12 +221,48 @@
   async function download(item, name, quality) {
     const title = isStream(item) ? VidHawkNaming.stripExt(name) : name;
     try {
-      await bg('download', { spec: { url: item.url, kind: item.kind === 'file' && item.verified === false ? 'auto' : item.kind, title, quality: quality || 'best', headers: item.headers || {}, pageUrl: tabUrl } });
+      await bg('download', { spec: { url: item.url, kind: item.kind === 'file' && item.verified === false ? 'auto' : item.kind, title, quality: quality || 'best', headers: item.headers || {}, pageUrl: tabUrl, expectedSize: item.kind === 'file' ? item.size || 0 : 0 } });
       toast('Added to VidHawk');
       refresh();
     } catch (e) {
       toast(`Failed: ${e.message}`);
     }
+  }
+
+  // --------------------------------------------- browser downloads (tab-independent)
+  function renderRecent() {
+    const recent = (data.recentDownloads || []).filter((d) => !d.takenOver);
+    const section = $('#recentSection');
+    section.hidden = recent.length === 0;
+    $('#recentCount').textContent = recent.length ? String(recent.length) : '';
+    const list = $('#recentList');
+    list.replaceChildren(...recent.map((d) => {
+      const node = mediaTpl.content.firstElementChild.cloneNode(true);
+      const ext = VidHawkNaming.fileNameFromUrl(d.filename || '').split('.').pop();
+      const kind = $('[data-role="kind"]', node);
+      kind.textContent = (ext && ext.length <= 5 ? ext : (d.mime || 'file').split('/').pop()).toUpperCase().slice(0, 7);
+      kind.className = 'kind';
+      kind.title = 'Started by the browser (Download button or link)';
+      const name = $('[data-role="name"]', node);
+      name.value = d.filename || VidHawkNaming.fileNameFromUrl(d.url) || 'download';
+      const meta = $('[data-role="meta"]', node);
+      meta.innerHTML = `<span class="host" title="${escapeAttr(d.url)}">${escapeHtml(host(d.url))}</span>${d.size ? `<span class="sep"></span><span>${fmtBytes(d.size)}</span>` : ''}${d.mime ? `<span class="sep"></span><span>${escapeHtml(d.mime)}</span>` : ''}`;
+      $('[data-role="quality"]', node).hidden = true;
+      $('[data-role="probe"]', node).hidden = true;
+      const dl = $('[data-action="download"]', node);
+      dl.disabled = !data.engine.connected;
+      dl.addEventListener('click', async () => {
+        try {
+          await bg('download', { spec: { url: d.url, kind: 'file', title: name.value, quality: 'best', headers: d.headers || {}, pageUrl: d.referrer || tabUrl, expectedSize: d.size || 0 } });
+          await bg('forget-download', { url: d.url });
+          toast('Added to VidHawk');
+          refresh();
+        } catch (e) { toast(`Failed: ${e.message}`); }
+      });
+      $('[data-action="copy"]', node).addEventListener('click', async () => { await navigator.clipboard.writeText(d.url); toast('URL copied'); });
+      $('[data-action="remove"]', node).addEventListener('click', async () => { await bg('forget-download', { url: d.url }); refresh(); });
+      return node;
+    }));
   }
 
   // ------------------------------------------------------------------ jobs
@@ -306,6 +342,7 @@
     data = await bg('get-tab', { tabId });
     renderEngine();
     renderMedia();
+    renderRecent();
     renderJobs();
     $('#takeOver').checked = !!data.settings?.takeOver;
   }

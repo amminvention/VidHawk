@@ -89,6 +89,20 @@ async function findTarget(pred, timeoutMs = 30000) {
   }
   // Let the SPA finish setting its title / loading the player before reading.
   await sleep(Number(process.env.VH_SETTLE_MS || 8000));
+  if (process.env.VH_PLAY === '1') {
+    // Behave like a user: click the play overlay / video, then call play() as a fallback.
+    const played = await page.eval(`(async () => {
+      const clicks = [];
+      const sel = ['.plyr__control--overlaid', '[class*="play-button"]', '[class*="playbutton"]', '[class*="play_button"]', '[class*="overlay"] button', 'button[aria-label*="Play" i]', '.vjs-big-play-button', 'video'];
+      for (const s of sel) { const el = document.querySelector(s); if (el) { clicks.push(s); el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window })); await new Promise(r => setTimeout(r, 800)); } }
+      const v = document.querySelector('video');
+      if (v) { try { v.muted = true; await v.play(); } catch (e) { clicks.push('play(): ' + e.message); } }
+      return { clicks, src: v ? (v.currentSrc || v.src || null) : null, ready: v ? v.readyState : null, videos: document.querySelectorAll('video').length, iframes: [...document.querySelectorAll('iframe')].map(f => f.src).filter(Boolean).slice(0, 5) };
+    })()`).catch((e) => ({ error: e.message }));
+    console.log('play attempt:', JSON.stringify(played));
+    await sleep(Number(process.env.VH_PLAY_WAIT_MS || 10000));
+    tab = JSON.parse(await swc.eval(`JSON.stringify(state.tabs[${tabId}] || null)`));
+  }
   tab = JSON.parse(await swc.eval(`JSON.stringify(state.tabs[${tabId}] || null)`));
   const items = Object.values(tab?.items || {});
   console.log('meta:', JSON.stringify(tab?.meta));

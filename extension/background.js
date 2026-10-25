@@ -4,7 +4,7 @@
 importScripts('lib/classify.js', 'lib/naming.js');
 
 const HOST = 'com.vidhawk.host';
-const HEADER_KEEP = new Set(['referer', 'origin', 'cookie', 'user-agent', 'authorization', 'accept-language', 'x-requested-with']);
+const HEADER_KEEP = new Set(['referer', 'origin', 'cookie', 'user-agent', 'authorization', 'accept', 'accept-language', 'x-requested-with', 'sec-fetch-dest', 'sec-fetch-mode', 'sec-fetch-site']);
 const TAKEOVER_EXTS = new Set([...VidHawkClassify.VIDEO, ...VidHawkClassify.AUDIO, ...VidHawkClassify.ARCHIVE, 'm3u8', 'mpd', 'torrent']);
 const MAX_ITEMS = 80;
 const STREAM_KINDS = new Set(['hls', 'dash']);
@@ -23,13 +23,14 @@ const notificationPaths = new Map();
 let saveTimer = null;
 function persist() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => chrome.storage.session.set({ tabs: state.tabs, jobs: state.jobs }).catch(() => {}), 250);
+  saveTimer = setTimeout(() => chrome.storage.session.set({ tabs: state.tabs, jobs: state.jobs, recentDownloads: state.recentDownloads || [] }).catch(() => {}), 250);
 }
 async function restore() {
   try {
-    const s = await chrome.storage.session.get(['tabs', 'jobs']);
+    const s = await chrome.storage.session.get(['tabs', 'jobs', 'recentDownloads']);
     if (s.tabs) state.tabs = s.tabs;
     if (s.jobs) state.jobs = s.jobs;
+    if (s.recentDownloads) state.recentDownloads = s.recentDownloads;
     const l = await chrome.storage.local.get('settings');
     if (l.settings) Object.assign(state.settings, l.settings);
   } catch {}
@@ -323,18 +324,60 @@ function notifyPopup() {
 }
 
 // ------------------------------------------------------- browser downloads
-chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
-  suggest();
-  if (!state.settings.takeOver || !state.engine.connected) return;
+// Downloads started by a "Download" button are navigations that turn into a
+// browser download, often in a tab that closes immediately — so they are kept
+// in a tab-independent list and, when enabled, handed to the engine.
+const MAX_RECENT = 20;
+function rememberDownload(item) {
   const url = item.finalUrl || item.url;
-  if (!/^https?:/i.test(url)) return;
+  if (!/^https?:/i.test(url)) return null;
+  state.recentDownloads ||= [];
+  const entry = {
+    id: item.id, url, filename: item.filename || '', mime: VidHawkClassify.mimeBase(item.mime), size: item.totalBytes > 0 ? item.totalBytes : null,
+    referrer: item.referrer || '', headers: headersFor(url, item.referrer), added: Date.now(), takenOver: false,
+  };
+  state.recentDownloads = [entry, ...state.recentDownloads.filter((d) => d.url !== url)].slice(0, MAX_RECENT);
+  persist();
+  notifyPopup();
+  return entry;
+}
+function shouldTakeOver(item) {
+  const url = item.finalUrl || item.url;
   const ext = VidHawkClassify.urlExt(item.filename || '') || VidHawkClassify.urlExt(url);
+  const mime = VidHawkClassify.mimeBase(item.mime);
+  const media = /^(video|audio)\//.test(mime);
   const big = item.totalBytes < 0 || item.totalBytes >= 1024 * 1024;
-  if (!TAKEOVER_EXTS.has(ext) || !(big || ext === 'torrent' || ext === 'm3u8' || ext === 'mpd')) return;
+  if (ext === 'torrent' || ext === 'm3u8' || ext === 'mpd') return ext;
+  if ((TAKEOVER_EXTS.has(ext) || media) && big) return ext || (media ? 'media' : 'file');
+  return null;
+}
+function basename(p) {
+  return (p || '').split(/[\\/]/).pop();
+}
+// onCreated always fires (onDeterminingFilename can be bypassed, e.g. by
+// automation or enterprise download policies), so record and take over here.
+chrome.downloads.onCreated.addListener((item) => {
+  const entry = rememberDownload({ ...item, filename: basename(item.filename) });
+  if (!entry || !state.settings.takeOver || !state.engine.connected) return;
+  const ext = shouldTakeOver(item);
+  if (!ext) return;
   chrome.downloads.cancel(item.id, () => chrome.downloads.erase({ id: item.id }, () => void chrome.runtime.lastError));
   const kind = ext === 'torrent' ? 'torrent' : ext === 'm3u8' ? 'hls' : ext === 'mpd' ? 'dash' : 'file';
-  startDownload({ url, kind, title: item.filename || '', headers: headersFor(url, item.referrer), pageUrl: item.referrer || '', quality: 'best' })
+  entry.takenOver = true;
+  persist();
+  startDownload({ url: entry.url, kind, title: entry.filename || '', headers: entry.headers, pageUrl: item.referrer || '', quality: 'best', expectedSize: entry.size || 0 })
     .catch((e) => notify('VidHawk could not take over the download', e.message));
+});
+// Chrome decides the file name slightly later; keep the recorded entry in sync.
+chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
+  suggest();
+  const entry = (state.recentDownloads || []).find((d) => d.id === item.id);
+  if (entry && !entry.filename && item.filename) { entry.filename = basename(item.filename); persist(); notifyPopup(); }
+});
+chrome.downloads.onChanged.addListener((delta) => {
+  if (!delta.filename?.current) return;
+  const entry = (state.recentDownloads || []).find((d) => d.id === delta.id);
+  if (entry && !entry.filename) { entry.filename = basename(delta.filename.current); persist(); notifyPopup(); }
 });
 
 // ------------------------------------------------------------ context menus
@@ -376,8 +419,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           new Promise((r) => setTimeout(() => r(null), 400)),
         ]);
         if (fresh && typeof fresh === 'object') { tab.meta = fresh; persist(); }
-        return { tab, jobs: state.jobs, engine: state.engine, settings: state.settings };
+        return { tab, jobs: state.jobs, engine: state.engine, settings: state.settings, recentDownloads: state.recentDownloads || [] };
       }
+      case 'forget-download':
+        state.recentDownloads = (state.recentDownloads || []).filter((d) => d.url !== msg.url);
+        persist();
+        return true;
       case 'ping':
         return await ping();
       case 'download':
