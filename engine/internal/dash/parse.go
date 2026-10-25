@@ -27,6 +27,7 @@ type Rep struct {
 	Codecs    string   `json:"codecs,omitempty"`
 	Lang      string   `json:"lang,omitempty"`
 	Mime      string   `json:"mime,omitempty"`
+	Duration  float64  `json:"-"` // period duration in seconds (0 when unknown)
 	InitURL   string   `json:"-"`
 	Segments  []string `json:"-"`
 	SingleURL string   `json:"-"`
@@ -221,7 +222,7 @@ func ParseMPD(text string, base *url.URL) ([]Rep, error) {
 				continue
 			}
 			rbase := baseOf(abase, r.BaseURL)
-			rep := Rep{ID: r.ID, Kind: kind, Bandwidth: r.Bandwidth, Width: r.Width, Height: r.Height, Codecs: r.Codecs, Lang: set.Lang, Mime: mimeType}
+			rep := Rep{ID: r.ID, Kind: kind, Bandwidth: r.Bandwidth, Width: r.Width, Height: r.Height, Codecs: r.Codecs, Lang: set.Lang, Mime: mimeType, Duration: pdur}
 			tpl := r.SegmentTemplate
 			if tpl == nil {
 				tpl = set.SegmentTemplate

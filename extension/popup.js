@@ -296,10 +296,12 @@
     const bits = [];
     if (pct != null) bits.push(`${pct.toFixed(pct < 10 ? 1 : 0)}%`);
     if (j.unit === 'segments' && j.total) bits.push(`${j.done}/${j.total} seg`);
-    if (j.bytes) bits.push(fmtBytes(j.bytes) + (j.unit === 'bytes' && j.total ? ` / ${fmtBytes(j.total)}` : ''));
+    const sizeTotal = j.unit === 'bytes' ? j.total : j.estimate;
+    if (j.bytes) bits.push(fmtBytes(j.bytes) + (sizeTotal ? ` of ${j.unit === 'bytes' ? '' : '≈'}${fmtBytes(sizeTotal)}` : ''));
+    else if (sizeTotal) bits.push(`${j.unit === 'bytes' ? '' : '≈'}${fmtBytes(sizeTotal)}`);
     if (j.status === 'running' && j.speed > 0) {
       bits.push(`${fmtBytes(j.speed)}/s`);
-      if (j.unit === 'bytes' && j.total > j.done) bits.push(`${fmtDuration((j.total - j.done) / j.speed)} left`);
+      if (sizeTotal > j.bytes) bits.push(`${fmtDuration((sizeTotal - j.bytes) / j.speed)} left`);
     }
     if (j.peers) bits.push(`${j.peers} peers`);
     if (j.detail) bits.push(j.detail);

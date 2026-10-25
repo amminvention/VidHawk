@@ -74,6 +74,9 @@ type Job struct {
 	Updated int64   `json:"updated"`
 
 	ExpectedSize int64 `json:"expectedSize,omitempty"`
+	// Estimate is the expected final size for segment-based downloads
+	// (bandwidth × duration), so UIs can show a size and an ETA.
+	Estimate int64 `json:"estimate,omitempty"`
 }
 
 func (j Job) Active() bool { return j.Status == StatusQueued || j.Status == StatusRunning }
@@ -673,7 +676,7 @@ func (m *Manager) runHLS(ctx context.Context, t *task) error {
 	job := t.snap()
 	cfg := m.Config()
 	res, err := hls.Download(ctx, m.client(t.headers), job.URL, job.OutDir, mediaTitle(job),
-		hls.Options{Quality: job.Quality, Concurrency: cfg.SegmentConcurrency, FFmpeg: ffmpeg.Find(cfg.FFmpegPath)},
+		hls.Options{Quality: job.Quality, Concurrency: cfg.SegmentConcurrency, FFmpeg: ffmpeg.Find(cfg.FFmpegPath), OnEstimate: m.estimator(t)},
 		func(done, total int, bytes int64) { m.report(t, int64(done), int64(total), bytes, "segments", nil) })
 	if err != nil {
 		return err
@@ -685,11 +688,20 @@ func (m *Manager) runHLS(ctx context.Context, t *task) error {
 	return nil
 }
 
+func (m *Manager) estimator(t *task) func(int64) {
+	return func(n int64) {
+		t.mu.Lock()
+		t.job.Estimate = n
+		t.mu.Unlock()
+		m.emit(t, true)
+	}
+}
+
 func (m *Manager) runDASH(ctx context.Context, t *task) error {
 	job := t.snap()
 	cfg := m.Config()
 	res, err := dash.Download(ctx, m.client(t.headers), job.URL, job.OutDir, mediaTitle(job),
-		dash.Options{Quality: job.Quality, Concurrency: cfg.SegmentConcurrency, FFmpeg: ffmpeg.Find(cfg.FFmpegPath)},
+		dash.Options{Quality: job.Quality, Concurrency: cfg.SegmentConcurrency, FFmpeg: ffmpeg.Find(cfg.FFmpegPath), OnEstimate: m.estimator(t)},
 		func(done, total int, bytes int64) { m.report(t, int64(done), int64(total), bytes, "segments", nil) })
 	if err != nil {
 		return err

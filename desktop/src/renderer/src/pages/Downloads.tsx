@@ -20,10 +20,13 @@ function details(j: Job): string {
   const pct = j.total > 0 ? Math.min(100, j.percent || (j.done / j.total) * 100) : null;
   if (pct != null) bits.push(`${pct.toFixed(pct < 10 ? 1 : 0)}%`);
   if (j.unit === 'segments' && j.total) bits.push(`${j.done}/${j.total} segments`);
-  if (j.bytes) bits.push(bytes(j.bytes) + (j.unit === 'bytes' && j.total ? ` of ${bytes(j.total)}` : ''));
+  const sizeTotal = j.unit === 'bytes' ? j.total : j.estimate || 0;
+  const approx = j.unit === 'bytes' ? '' : '≈';
+  if (j.bytes) bits.push(bytes(j.bytes) + (sizeTotal ? ` of ${approx}${bytes(sizeTotal)}` : ''));
+  else if (sizeTotal) bits.push(`${approx}${bytes(sizeTotal)}`);
   if (j.status === 'running' && j.speed > 0) {
     bits.push(`${bytes(j.speed)}/s`);
-    if (j.unit === 'bytes' && j.total > j.done) bits.push(`${duration((j.total - j.done) / j.speed)} left`);
+    if (sizeTotal > j.bytes) bits.push(`${duration((sizeTotal - j.bytes) / j.speed)} left`);
   }
   if (j.peers) bits.push(`${j.peers} peers`);
   if (j.detail) bits.push(j.detail);

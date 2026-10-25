@@ -23,6 +23,8 @@ export interface Job {
   error?: string;
   created: number;
   updated: number;
+  expectedSize?: number;
+  estimate?: number;
 }
 
 export interface EngineInfo {

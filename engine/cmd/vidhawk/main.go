@@ -182,6 +182,8 @@ func printProgress(j engine.Job) {
 	switch {
 	case j.Status == engine.StatusQueued:
 		line = "queued"
+	case j.Total > 0 && j.Unit == "segments" && j.Estimate > 0:
+		line = fmt.Sprintf("%5.1f%%  %s/%s  %s of ~%s  %s/s", j.Percent, humanUnit(j.Done, j.Unit), humanUnit(j.Total, j.Unit), human(j.Bytes), human(j.Estimate), human(int64(j.Speed)))
 	case j.Total > 0:
 		line = fmt.Sprintf("%5.1f%%  %s/%s  %s/s", j.Percent, humanUnit(j.Done, j.Unit), humanUnit(j.Total, j.Unit), human(int64(j.Speed)))
 	default:

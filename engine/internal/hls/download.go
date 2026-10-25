@@ -28,6 +28,9 @@ type Options struct {
 	Concurrency int
 	FFmpeg      string // empty → no remux
 	TmpRoot     string // empty → <outDir>/.vidhawk-tmp
+	// OnEstimate receives the expected total size (variant bandwidth × duration)
+	// as soon as the playlists are parsed, before any segment is fetched.
+	OnEstimate func(bytes int64)
 }
 
 type Result struct {
@@ -48,6 +51,7 @@ func Download(ctx context.Context, c *fetch.Client, playlistURL, outDir, title s
 
 	var media, audio *MediaPlaylist
 	label := ""
+	bandwidth := 0
 	if IsMaster(text) {
 		variants, renditions, err := ParseMaster(text, base)
 		if err != nil {
@@ -55,6 +59,7 @@ func Download(ctx context.Context, c *fetch.Client, playlistURL, outDir, title s
 		}
 		v := SelectVariant(variants, opt.Quality)
 		label = v.Label()
+		bandwidth = v.Bandwidth
 		mtext, mresp, err := c.GetText(ctx, v.URL, nil, 64<<20)
 		if err != nil {
 			return Result{}, err
@@ -81,6 +86,9 @@ func Download(ctx context.Context, c *fetch.Client, playlistURL, outDir, title s
 	}
 	if media.DRM() || (audio != nil && audio.DRM()) {
 		return Result{}, ErrDRM
+	}
+	if opt.OnEstimate != nil && bandwidth > 0 {
+		opt.OnEstimate(int64(float64(bandwidth) * media.Duration() / 8))
 	}
 
 	total := len(media.Segments)

@@ -22,6 +22,7 @@ type Options struct {
 	Concurrency int
 	FFmpeg      string
 	TmpRoot     string
+	OnEstimate  func(bytes int64)
 }
 
 type Result struct {
@@ -57,12 +58,18 @@ func Download(ctx context.Context, c *fetch.Client, mpdURL, outDir, title string
 
 	total := 0
 	label := ""
+	var estimate float64
 	if video != nil {
 		total += video.Units()
 		label = video.Label()
+		estimate += float64(video.Bandwidth) * video.Duration / 8
 	}
 	if audio != nil {
 		total += audio.Units()
+		estimate += float64(audio.Bandwidth) * audio.Duration / 8
+	}
+	if opt.OnEstimate != nil && estimate > 0 {
+		opt.OnEstimate(int64(estimate))
 	}
 	tmp, err := tempDir(opt.TmpRoot, outDir)
 	if err != nil {

@@ -1,7 +1,7 @@
 {
   "name": "vidhawk-desktop",
   "productName": "VidHawk",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "VidHawk — hunts down any video, from any player. Desktop app.",
   "main": "./out/main/index.js",
   "author": "AMM Invention",
