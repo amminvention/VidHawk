@@ -117,6 +117,10 @@ async function findTarget(pred, timeoutMs = 30000) {
   await popup.send('Page.enable');
   await popup.send('Emulation.setDeviceMetricsOverride', { width: 392, height: 600, deviceScaleFactor: 2, mobile: false });
   await sleep(4000);
+  if (process.env.VH_OPEN_OPTIONS === '1') {
+    await popup.eval(`(() => { const b = document.querySelector('#mediaList [data-action="options"]'); if (b) b.click(); const s = document.querySelector('#mediaList [data-role="series"]'); if (s && !s.checked) { s.click(); } return true; })()`);
+    await sleep(500);
+  }
   const shot = await popup.send('Page.captureScreenshot', { format: 'png' });
   const shotPath = path.join(outDir, 'popup.png');
   fs.writeFileSync(shotPath, Buffer.from(shot.data, 'base64'));

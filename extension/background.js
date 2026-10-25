@@ -450,6 +450,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       case 'open':
         await call({ cmd: 'open', path: msg.path }, 10000);
         return true;
+      case 'set-config': {
+        const r = await call({ cmd: 'config', set: msg.set || {} }, 10000);
+        if (state.engine.info && r.config?.downloadDir) state.engine.info.downloadDir = r.config.downloadDir;
+        return r.config;
+      }
       case 'clear-finished':
         for (const [id, j] of Object.entries(state.jobs)) {
           if (j.status !== 'running' && j.status !== 'queued') { call({ cmd: 'remove', jobId: id }, 10000).catch(() => {}); delete state.jobs[id]; }

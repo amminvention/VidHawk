@@ -25,6 +25,7 @@
     <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></symbol>
     <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></symbol>
     <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></symbol>
   </svg>
 
   <header class="top">
@@ -91,6 +92,12 @@
         <svg aria-hidden="true"><use href="#i-download"/></svg><span>Add</span>
       </button>
     </form>
+    <div class="footer-row folder-row">
+      <label class="sr-only" for="defaultFolder">Default download folder</label>
+      <svg aria-hidden="true"><use href="#i-folder"/></svg>
+      <input id="defaultFolder" type="text" spellcheck="false" title="Default download folder (engine setting)" />
+      <button id="saveFolder" class="btn ghost" type="button" hidden>Save</button>
+    </div>
     <div class="footer-row">
       <button id="pageYtdlp" class="btn ghost" type="button" title="Hand the current page to yt-dlp (for sites that hide their streams)">
         <svg aria-hidden="true"><use href="#i-layers"/></svg><span>Grab page via yt-dlp</span>
@@ -113,12 +120,30 @@
         <select class="quality" data-role="quality" aria-label="Quality" hidden></select>
         <span class="probe" data-role="probe" hidden></span>
         <span class="spacer"></span>
+        <button class="icon" data-action="options" type="button" title="Folder and series options" aria-label="Folder and series options" aria-expanded="false"><svg aria-hidden="true"><use href="#i-settings"/></svg></button>
         <button class="icon" data-action="copy" type="button" title="Copy URL" aria-label="Copy URL"><svg aria-hidden="true"><use href="#i-copy"/></svg></button>
         <button class="icon" data-action="remove" type="button" title="Hide" aria-label="Hide this item"><svg aria-hidden="true"><use href="#i-x"/></svg></button>
         <button class="btn primary" data-action="download" type="button"><svg aria-hidden="true"><use href="#i-download"/></svg><span>Download</span></button>
       </div>
+      <div class="options" data-role="options" hidden>
+        <label class="opt">
+          <span>Save to</span>
+          <input type="text" data-role="folder" list="recentFolders" placeholder="Default folder" spellcheck="false" />
+        </label>
+        <label class="opt check">
+          <input type="checkbox" data-role="series" />
+          <span>Series episode <small data-role="seriesHint"></small></span>
+        </label>
+        <div class="series-grid" data-role="seriesFields" hidden>
+          <label class="opt"><span>Show</span><input type="text" data-role="show" spellcheck="false" /></label>
+          <label class="opt narrow"><span>Season</span><input type="number" min="0" max="99" data-role="season" /></label>
+          <label class="opt narrow"><span>Episode</span><input type="number" min="0" max="999" data-role="episode" /></label>
+          <label class="opt check wide"><input type="checkbox" data-role="organize" /><span>File under <code>Show\Season 01\</code></span></label>
+        </div>
+      </div>
     </li>
   </template>
+  <datalist id="recentFolders"></datalist>
 
   <template id="jobItemTpl">
     <li class="card job">

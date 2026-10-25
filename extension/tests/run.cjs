@@ -94,6 +94,18 @@ test('suggestName builds "Title.ext" per kind', () => {
   assert.equal(N.suggestName({ kind: 'file', filename: 'given.pdf', url: 'https://a/x' }, meta, 'https://x/'), 'given.pdf');
 });
 
+test('season/episode detection and naming', () => {
+  assert.deepEqual(N.parseEpisode('Some Show - S1 E1'), { show: 'Some Show', season: 1, episode: 1 });
+  assert.deepEqual(N.parseEpisode('Some.Show.S02E07.1080p'), { show: 'Some Show', season: 2, episode: 7 });
+  assert.deepEqual(N.parseEpisode('Some Show 3x12 Finale'), { show: 'Some Show', season: 3, episode: 12 });
+  assert.deepEqual(N.parseEpisode('Some Show (2021) Season 1 Episode 4'), { show: 'Some Show', season: 1, episode: 4 });
+  assert.deepEqual(N.parseEpisode('Episode 9 - Some Show'), { show: 'Some Show', season: null, episode: 9 });
+  assert.equal(N.parseEpisode('Just a Film (2020)'), null);
+  assert.equal(N.episodeName('Some Show', 1, 1), 'Some Show - S01E01');
+  assert.equal(N.episodeName('Some Show', null, 12), 'Some Show - E12');
+  assert.deepEqual(N.seasonFolder('Some: Show', 2), ['Some Show', 'Season 02']);
+});
+
 test('sanitize removes illegal characters and caps length', () => {
   assert.equal(N.sanitize('a<b>:"c/d\\e|f?g*h.mp4'), 'abcdefgh.mp4');
   assert.ok(N.sanitize('x'.repeat(400)).length <= 150);

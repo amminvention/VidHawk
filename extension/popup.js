@@ -15,6 +15,73 @@
   const probing = new Set();
   const names = new Map();
   const qualities = new Map();
+  const options = new Map(); // item id -> { open, folder, series, show, season, episode, organize }
+  let recentFolders = [];
+
+  const defaultFolder = () => data.engine?.info?.downloadDir || '';
+  const sep = () => (defaultFolder().includes('\\') ? '\\' : '/');
+  const joinPath = (...parts) => parts.filter(Boolean).map((p, i) => (i ? p.replace(/^[\\/]+/, '') : p.replace(/[\\/]+$/, ''))).join(sep());
+
+  async function loadRecentFolders() {
+    try { recentFolders = (await chrome.storage.local.get('recentFolders')).recentFolders || []; } catch { recentFolders = []; }
+    $('#recentFolders').replaceChildren(...recentFolders.map((f) => { const o = document.createElement('option'); o.value = f; return o; }));
+  }
+  async function rememberFolder(folder) {
+    if (!folder) return;
+    recentFolders = [folder, ...recentFolders.filter((f) => f !== folder)].slice(0, 8);
+    try { await chrome.storage.local.set({ recentFolders }); } catch {}
+  }
+
+  // Resolves the item's options into the final title and output folder.
+  function resolveTarget(item, rawName, opt) {
+    let title = isStream(item) ? VidHawkNaming.stripExt(rawName) : rawName;
+    let outDir = (opt?.folder || '').trim();
+    if (opt?.series && opt.episode !== '' && opt.episode != null) {
+      const ext = isStream(item) ? '' : (rawName.match(/\.[a-z0-9]{1,5}$/i) || [''])[0];
+      title = VidHawkNaming.episodeName(opt.show, opt.season === '' ? null : opt.season, opt.episode) + ext;
+      if (opt.organize) outDir = joinPath(outDir || defaultFolder(), ...VidHawkNaming.seasonFolder(opt.show, opt.season === '' ? null : opt.season));
+    }
+    return { title, outDir };
+  }
+
+  function wireOptions(node, item, nameInput) {
+    const opt = options.get(item.id) || (() => {
+      const guess = VidHawkNaming.parseEpisode(nameInput.value) || VidHawkNaming.parseEpisode(data.tab.meta?.h1 || '') || VidHawkNaming.parseEpisode(data.tab.meta?.title || '');
+      const baseName = VidHawkNaming.stripExt(nameInput.value).replace(/\s\(\d+\)$/, '');
+      const o = { open: false, folder: '', series: !!guess, show: guess?.show || baseName, season: guess?.season ?? '', episode: guess?.episode ?? '', organize: false, detected: !!guess };
+      options.set(item.id, o);
+      return o;
+    })();
+    const panel = $('[data-role="options"]', node);
+    const toggle = $('[data-action="options"]', node);
+    const fields = $('[data-role="seriesFields"]', node);
+    const seriesBox = $('[data-role="series"]', node);
+    const folder = $('[data-role="folder"]', node);
+    const show = $('[data-role="show"]', node);
+    const season = $('[data-role="season"]', node);
+    const episode = $('[data-role="episode"]', node);
+    const organize = $('[data-role="organize"]', node);
+    panel.hidden = !opt.open;
+    toggle.setAttribute('aria-expanded', String(opt.open));
+    toggle.classList.toggle('on', opt.open || opt.series);
+    folder.value = opt.folder;
+    folder.placeholder = defaultFolder() || 'Default folder';
+    seriesBox.checked = opt.series;
+    $('[data-role="seriesHint"]', node).textContent = opt.detected ? `detected S${opt.season === '' ? '?' : opt.season} E${opt.episode}` : '';
+    fields.hidden = !opt.series;
+    show.value = opt.show;
+    season.value = opt.season;
+    episode.value = opt.episode;
+    organize.checked = opt.organize;
+    toggle.addEventListener('click', () => { opt.open = !opt.open; panel.hidden = !opt.open; toggle.setAttribute('aria-expanded', String(opt.open)); toggle.classList.toggle('on', opt.open || opt.series); });
+    folder.addEventListener('input', () => { opt.folder = folder.value; });
+    seriesBox.addEventListener('change', () => { opt.series = seriesBox.checked; fields.hidden = !opt.series; toggle.classList.toggle('on', opt.open || opt.series); });
+    show.addEventListener('input', () => { opt.show = show.value; });
+    season.addEventListener('input', () => { opt.season = season.value === '' ? '' : Number(season.value); });
+    episode.addEventListener('input', () => { opt.episode = episode.value === '' ? '' : Number(episode.value); });
+    organize.addEventListener('change', () => { opt.organize = organize.checked; });
+    return opt;
+  }
 
   const mediaList = $('#mediaList');
   const staleList = $('#staleList');
@@ -87,6 +154,8 @@
   // ---------------------------------------------------------------- engine
   function renderEngine() {
     const e = data.engine || {};
+    const df = $('#defaultFolder');
+    if (document.activeElement !== df) df.value = e.info?.downloadDir || '';
     const btn = $('#engineBtn');
     btn.classList.toggle('ok', !!e.connected);
     btn.classList.toggle('err', !e.connected && !!e.error);
@@ -183,9 +252,10 @@
     probe.hidden = !probing.has(item.id);
     probe.textContent = 'Reading stream…';
 
+    const opt = wireOptions(node, item, name);
     const dl = $('[data-action="download"]', node);
     dl.disabled = !data.engine.connected || !!p?.drm;
-    dl.addEventListener('click', () => download(item, name.value, quality.hidden ? 'best' : quality.value));
+    dl.addEventListener('click', () => download(item, name.value, quality.hidden ? 'best' : quality.value, opt));
     $('[data-action="copy"]', node).addEventListener('click', async () => { await navigator.clipboard.writeText(item.url); toast('URL copied'); });
     $('[data-action="remove"]', node).addEventListener('click', async () => { await bg('remove-item', { tabId, key: item.id }); refresh(); });
     return node;
@@ -218,11 +288,12 @@
     }
   }
 
-  async function download(item, name, quality) {
-    const title = isStream(item) ? VidHawkNaming.stripExt(name) : name;
+  async function download(item, name, quality, opt) {
+    const { title, outDir } = resolveTarget(item, name, opt);
     try {
-      await bg('download', { spec: { url: item.url, kind: item.kind === 'file' && item.verified === false ? 'auto' : item.kind, title, quality: quality || 'best', headers: item.headers || {}, pageUrl: tabUrl, expectedSize: item.kind === 'file' ? item.size || 0 : 0 } });
-      toast('Added to VidHawk');
+      await bg('download', { spec: { url: item.url, kind: item.kind === 'file' && item.verified === false ? 'auto' : item.kind, title, quality: quality || 'best', headers: item.headers || {}, pageUrl: tabUrl, expectedSize: item.kind === 'file' ? item.size || 0 : 0, outDir: outDir || undefined } });
+      if (opt?.folder) rememberFolder(opt.folder.trim());
+      toast(outDir ? `Added → ${outDir}` : 'Added to VidHawk');
       refresh();
     } catch (e) {
       toast(`Failed: ${e.message}`);
@@ -393,6 +464,18 @@
     }
   });
   $('#clearDone').addEventListener('click', async () => { await bg('clear-finished'); refresh(); });
+  const dfInput = $('#defaultFolder');
+  const dfSave = $('#saveFolder');
+  dfInput.addEventListener('input', () => { dfSave.hidden = dfInput.value.trim() === (data.engine?.info?.downloadDir || ''); });
+  dfSave.addEventListener('click', async () => {
+    try {
+      await bg('set-config', { set: { downloadDir: dfInput.value.trim() } });
+      toast('Default folder saved');
+      dfSave.hidden = true;
+      data.engine = await bg('ping');
+      renderEngine();
+    } catch (e) { toast(`Failed: ${e.message}`); }
+  });
   $('#takeOver').addEventListener('change', (e) => bg('settings', { settings: { takeOver: e.target.checked } }));
 
   chrome.runtime.onMessage.addListener((msg) => {
@@ -408,6 +491,7 @@
     const tab = debugTab ? await chrome.tabs.get(debugTab) : (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
     tabId = tab?.id ?? null;
     tabUrl = tab?.url || '';
+    await loadRecentFolders();
     await refresh();
     if (!data.engine.connected || Date.now() - (data.engine.lastPing || 0) > 30000) {
       data.engine = await bg('ping');

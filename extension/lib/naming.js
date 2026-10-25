@@ -92,7 +92,47 @@ const VidHawkNaming = (() => {
     return `${sanitize(title)}.${ext}`;
   }
 
-  return { cleanTitle, pickTitle, sanitize, suggestName, fileNameFromUrl, stripExt };
+  // Season/episode detection: "S01E02", "S1 E1", "1x02", "Season 1 Episode 2", "Episode 2", "Ep. 2".
+  const EP_PATTERNS = [
+    { re: /\bS(\d{1,2})\s*[ .\-_]?\s*E(\d{1,3})\b/i, s: 1, e: 2 },
+    { re: /\b(\d{1,2})x(\d{1,3})\b/i, s: 1, e: 2 },
+    { re: /\bSeason\s*(\d{1,2})\b[^\d]{0,24}?\bEpisode\s*(\d{1,3})\b/i, s: 1, e: 2 },
+    { re: /\bEpisode\s*(\d{1,3})\b/i, s: null, e: 1 },
+    { re: /\bEp\.?\s*(\d{1,3})\b/i, s: null, e: 1 },
+  ];
+  const pad2 = (n) => String(n).padStart(2, '0');
+
+  // Returns { show, season, episode } or null when the title carries no episode marker.
+  function parseEpisode(title) {
+    const t = String(title || '');
+    for (const p of EP_PATTERNS) {
+      const m = p.re.exec(t);
+      if (!m) continue;
+      const season = p.s ? Number(m[p.s]) : null;
+      const episode = Number(m[p.e]);
+      let show = t.slice(0, m.index).replace(/[\s\-–—:·•|(\[.]+$/, '').trim();
+      if (!show) show = t.slice(m.index + m[0].length).replace(/^[\s\-–—:·•|)\]]+/, '').trim();
+      show = show.replace(/\s*\((?:19|20)\d{2}\)\s*$/, '').trim();
+      // Scene-style "Some.Show.S02E07" → "Some Show".
+      if (!/\s/.test(show) && show.includes('.')) show = show.replace(/\./g, ' ').trim();
+      return { show, season, episode };
+    }
+    return null;
+  }
+
+  function episodeName(show, season, episode) {
+    const base = sanitize(show || 'Episode');
+    const tag = season != null && season !== '' ? `S${pad2(season)}E${pad2(episode)}` : `E${pad2(episode)}`;
+    return `${base} - ${tag}`;
+  }
+
+  function seasonFolder(show, season) {
+    const parts = [sanitize(show || 'Show')];
+    if (season != null && season !== '') parts.push(`Season ${pad2(season)}`);
+    return parts;
+  }
+
+  return { cleanTitle, pickTitle, sanitize, suggestName, fileNameFromUrl, stripExt, parseEpisode, episodeName, seasonFolder };
 })();
 
 if (typeof module !== 'undefined') module.exports = VidHawkNaming;

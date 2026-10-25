@@ -4,6 +4,7 @@ import { useEffect } from 'preact/hooks';
 import { api, config, connected, type ProbeResult } from '../api';
 import { bytes, duration } from '../format';
 import { Button, Icon } from '../components/ui';
+import { episodeName, parseEpisode, seasonFolder } from '../episode';
 
 export function Add({ initialUrl, onDone }: { initialUrl: string; onDone: () => void }): JSX.Element {
   const url = useSignal(initialUrl);
@@ -15,8 +16,37 @@ export function Add({ initialUrl, onDone }: { initialUrl: string; onDone: () => 
   const probing = useSignal(false);
   const error = useSignal('');
   const busy = useSignal(false);
+  const series = useSignal(false);
+  const show = useSignal('');
+  const season = useSignal('');
+  const episode = useSignal('');
+  const organize = useSignal(false);
+  const detected = useSignal('');
 
   useEffect(() => { url.value = initialUrl; probe.value = null; }, [initialUrl]);
+
+  function detectFrom(text: string) {
+    const ep = parseEpisode(text);
+    if (!ep) return;
+    series.value = true;
+    show.value = ep.show;
+    season.value = ep.season == null ? '' : String(ep.season);
+    episode.value = String(ep.episode);
+    detected.value = `detected S${ep.season ?? '?'} E${ep.episode}`;
+  }
+
+  const sep = (config.value?.downloadDir || '').includes('\\') ? '\\' : '/';
+  const joinPath = (...parts: string[]) => parts.filter(Boolean).map((p, i) => (i ? p.replace(/^[\\/]+/, '') : p.replace(/[\\/]+$/, ''))).join(sep);
+  function finalTarget(): { title: string; outDir?: string } {
+    let t = title.value;
+    let dir = outDir.value || '';
+    if (series.value && episode.value !== '') {
+      const s = season.value === '' ? null : Number(season.value);
+      t = episodeName(show.value, s, Number(episode.value));
+      if (organize.value) dir = joinPath(dir || config.value?.downloadDir || '', ...seasonFolder(show.value, s));
+    }
+    return { title: t, outDir: dir || undefined };
+  }
 
   const isMagnet = /^magnet:/i.test(url.value.trim());
   const canProbe = /^https?:\/\//i.test(url.value.trim());
@@ -29,6 +59,7 @@ export function Add({ initialUrl, onDone }: { initialUrl: string; onDone: () => 
       if (referer.value) headers.referer = referer.value;
       probe.value = await api.probe(url.value.trim(), headers);
       if (!title.value && probe.value.filename) title.value = probe.value.filename;
+      detectFrom(title.value || probe.value.filename || url.value);
     } catch (e) {
       error.value = (e as Error).message;
     } finally {
@@ -43,15 +74,16 @@ export function Add({ initialUrl, onDone }: { initialUrl: string; onDone: () => 
     if (!lines.length) return;
     busy.value = true;
     try {
+      const target = finalTarget();
       for (const u of lines) {
         const headers: Record<string, string> = {};
         if (referer.value) headers.referer = referer.value;
         await api.submit({
           url: u,
           kind: /^magnet:/i.test(u) || /\.torrent$/i.test(u) ? 'torrent' : 'auto',
-          title: lines.length === 1 ? title.value : '',
+          title: lines.length === 1 ? target.title : '',
           quality: quality.value,
-          outDir: outDir.value || undefined,
+          outDir: target.outDir,
           headers,
         });
       }
@@ -100,7 +132,7 @@ export function Add({ initialUrl, onDone }: { initialUrl: string; onDone: () => 
         <div class="grid-2">
           <label class="field">
             <span>Title <small>optional</small></span>
-            <input type="text" value={title.value} onInput={(e) => (title.value = (e.target as HTMLInputElement).value)} placeholder={isMagnet ? 'Taken from the torrent' : 'Taken from the page or file'} />
+            <input type="text" value={title.value} onInput={(e) => { title.value = (e.target as HTMLInputElement).value; detectFrom(title.value); }} placeholder={isMagnet ? 'Taken from the torrent' : 'Taken from the page or file'} />
           </label>
           <label class="field">
             <span>Quality</span>
@@ -124,6 +156,18 @@ export function Add({ initialUrl, onDone }: { initialUrl: string; onDone: () => 
               <Button icon="folder" onClick={async () => { const d = await window.vidhawk.pickDirectory(outDir.value || config.value?.downloadDir); if (d) outDir.value = d; }}>Browse</Button>
             </div>
           </label>
+        </div>
+
+        <div class="card series">
+          <label class="check"><input type="checkbox" checked={series.value} onChange={(e) => (series.value = (e.target as HTMLInputElement).checked)} /> Series episode {detected.value && <small class="ok-text">{detected.value}</small>}</label>
+          {series.value && (
+            <div class="grid-3">
+              <label class="field"><span>Show</span><input type="text" value={show.value} onInput={(e) => (show.value = (e.target as HTMLInputElement).value)} /></label>
+              <label class="field"><span>Season</span><input type="number" min={0} max={99} value={season.value} onInput={(e) => (season.value = (e.target as HTMLInputElement).value)} /></label>
+              <label class="field"><span>Episode</span><input type="number" min={0} max={999} value={episode.value} onInput={(e) => (episode.value = (e.target as HTMLInputElement).value)} /></label>
+              <label class="check" style={{ gridColumn: '1 / -1' }}><input type="checkbox" checked={organize.value} onChange={(e) => (organize.value = (e.target as HTMLInputElement).checked)} /> File under <code>Show{sep}Season 01{sep}</code> — name becomes <code>{episodeName(show.value, season.value === '' ? null : Number(season.value), Number(episode.value || 0))}</code></label>
+            </div>
+          )}
         </div>
 
         {error.value && <p class="form-error"><Icon name="alert" /> {error.value}</p>}
