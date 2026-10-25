@@ -23,14 +23,15 @@ const notificationPaths = new Map();
 let saveTimer = null;
 function persist() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => chrome.storage.session.set({ tabs: state.tabs, jobs: state.jobs, recentDownloads: state.recentDownloads || [] }).catch(() => {}), 250);
+  saveTimer = setTimeout(() => chrome.storage.session.set({ tabs: state.tabs, jobs: state.jobs, recentDownloads: state.recentDownloads || [], batch: state.batch || null }).catch(() => {}), 250);
 }
 async function restore() {
   try {
-    const s = await chrome.storage.session.get(['tabs', 'jobs', 'recentDownloads']);
+    const s = await chrome.storage.session.get(['tabs', 'jobs', 'recentDownloads', 'batch']);
     if (s.tabs) state.tabs = s.tabs;
     if (s.jobs) state.jobs = s.jobs;
     if (s.recentDownloads) state.recentDownloads = s.recentDownloads;
+    if (s.batch) { state.batch = s.batch; state.batch.running = false; if (!state.batch.finished && !state.batch.stopped) runBatch(); }
     const l = await chrome.storage.local.get('settings');
     if (l.settings) Object.assign(state.settings, l.settings);
   } catch {}
@@ -404,6 +405,69 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
     .catch((e) => notify('VidHawk', e.message));
 });
 
+// --------------------------------------------------------- batch catching
+// Opens related pages one by one in background tabs, waits for a stream to be
+// caught on each, hands it to the engine with series naming, and moves on.
+function streamFor(tabId) {
+  const tab = state.tabs[tabId];
+  if (!tab) return null;
+  const items = Object.values(tab.items).filter((i) => !i.hidden && i.kind !== 'segment' && !(i.childOf && tab.items[i.childOf]));
+  const streams = items.filter((i) => STREAM_KINDS.has(i.kind));
+  const videos = items.filter((i) => i.kind === 'file' && i.media === 'video' && i.verified !== false);
+  const pick = (list) => list.sort((a, b) => (b.playing || 0) - (a.playing || 0) || (b.seen || 0) - (a.seen || 0) || b.added - a.added)[0];
+  return pick(streams) || pick(videos) || null;
+}
+async function waitForStream(tabId, ms) {
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline) {
+    const found = streamFor(tabId);
+    if (found && (found.playing || Date.now() > deadline - ms + 8000)) return found;
+    try { await chrome.tabs.get(tabId); } catch { return null; }
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  return streamFor(tabId);
+}
+async function runBatch() {
+  const b = state.batch;
+  if (!b || b.running) return;
+  b.running = true;
+  while (state.batch === b && b.index < b.items.length && !b.stopped) {
+    const it = b.items[b.index];
+    it.status = 'opening';
+    persist(); notifyPopup();
+    let tab = null;
+    try {
+      tab = await chrome.tabs.create({ url: it.href, active: false });
+      const found = await waitForStream(tab.id, b.timeoutMs || 60000);
+      if (!found) throw new Error('no stream caught on this page');
+      const ep = it.episode != null ? it : VidHawkNaming.parseEpisode(it.text) || VidHawkNaming.parseEpisode(state.tabs[tab.id]?.meta?.h1 || '') || VidHawkNaming.parseEpisode(state.tabs[tab.id]?.meta?.title || '');
+      const show = b.show || ep?.show || VidHawkNaming.pickTitle(state.tabs[tab.id]?.meta, it.href) || 'Episode';
+      let title = ep && ep.episode != null ? VidHawkNaming.episodeName(show, ep.season ?? b.season ?? null, ep.episode) : VidHawkNaming.sanitize(VidHawkNaming.pickTitle(state.tabs[tab.id]?.meta, it.href) || it.text || show);
+      let outDir = b.folder || '';
+      if (b.organize) {
+        const base = outDir || state.engine.info?.downloadDir || '';
+        const sepChar = base.includes('\\') ? '\\' : '/';
+        outDir = [base.replace(/[\\/]+$/, ''), ...VidHawkNaming.seasonFolder(show, ep?.season ?? b.season ?? null)].join(sepChar);
+      }
+      if (found.kind === 'file' && found.ext) title += `.${found.ext}`;
+      const job = await startDownload({ url: found.url, kind: found.kind, title, quality: b.quality || 'best', headers: found.headers || {}, pageUrl: it.href, outDir: outDir || undefined, expectedSize: found.kind === 'file' ? found.size || 0 : 0 });
+      it.status = 'queued';
+      it.jobId = job.id;
+      it.title = title;
+    } catch (e) {
+      it.status = 'error';
+      it.error = e.message;
+    } finally {
+      if (tab) chrome.tabs.remove(tab.id).catch(() => {});
+    }
+    b.index++;
+    persist(); notifyPopup();
+  }
+  b.running = false;
+  b.finished = b.index >= b.items.length || b.stopped;
+  persist(); notifyPopup();
+}
+
 // --------------------------------------------------------------- messaging
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   (async () => {
@@ -419,8 +483,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           new Promise((r) => setTimeout(() => r(null), 400)),
         ]);
         if (fresh && typeof fresh === 'object') { tab.meta = fresh; persist(); }
-        return { tab, jobs: state.jobs, engine: state.engine, settings: state.settings, recentDownloads: state.recentDownloads || [] };
+        return { tab, jobs: state.jobs, engine: state.engine, settings: state.settings, recentDownloads: state.recentDownloads || [], batch: state.batch || null };
       }
+      case 'batch-start': {
+        if (state.batch?.running) throw new Error('a batch is already running');
+        state.batch = { id: Date.now(), items: msg.items.map((l) => ({ ...l, status: 'pending' })), index: 0, show: msg.show || '', season: msg.season ?? null, quality: msg.quality || 'best', folder: msg.folder || '', organize: !!msg.organize, timeoutMs: 60000, running: false, stopped: false, finished: false };
+        persist();
+        runBatch();
+        return state.batch;
+      }
+      case 'batch-stop':
+        if (state.batch) { state.batch.stopped = true; persist(); }
+        return true;
+      case 'batch-clear':
+        if (!state.batch?.running) { state.batch = null; persist(); }
+        return true;
       case 'forget-download':
         state.recentDownloads = (state.recentDownloads || []).filter((d) => d.url !== msg.url);
         persist();

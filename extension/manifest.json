@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "VidHawk",
-  "version": "0.1.0",
+  "version": "0.1.5",
   "description": "Hunts down any video, audio or file on any page — HLS, DASH, MP4, torrents — and hands it to the VidHawk engine.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwqoRdV0eZzOerbc5L8nfA8UnfjciUm0RdQx/mBi/wcVFwofl7qTBTKysIRm2rGQ7lVc89fxNNHGE6nlcrzIVtqDx51/SNQIpWl0XNm7HedcHGq9c48t0bWrQjusZ9WOeb9P5tx/fFcyyFwkzJOEjsHwZVzthyU4icDFU9eSs6bo9LSo0sh71teohsxON2FVe6E71uWdjaQQSUpSi6hSifDGqK6+DhoAKp2RSj5IN4brY3OZP3gu4NLqXR1B8wf6/14QUsrAf+8Mhy60acCvb0XdcPRJBfAoBC6ZVJkGrPhFg9L4d2g1zsM9xdA2cb/zt+vIpiY0UXkVgO2k97N9bQQIDAQAB",
   "icons": { "16": "icons/16.png", "32": "icons/32.png", "48": "icons/48.png", "128": "icons/128.png" },

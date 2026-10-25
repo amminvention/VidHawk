@@ -27,7 +27,10 @@ an MIT license. The teardown is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md
 |---|---|
 | **Catches streams any player uses** | Three capture layers in the extension: response headers, the *bodies* of manifests as the page fetches them (`#EXTM3U` / `<MPD>` regardless of MIME type or `206` responses), and stream URLs hidden inside JSON API responses. Works with hls.js, dash.js, Shaka, video.js, JW Player, native `<video>` … |
 | **Quality picker** | Every HLS/DASH stream is probed; pick 2160p/1080p/720p… or the smallest. Separate audio renditions are muxed in. |
-| **Names files from real metadata** | JSON-LD → Open Graph → `h1` → cleaned title, with site names and boilerplate stripped: `Dar-E-Nijaat [1080p].mp4`, not `Dar-e-nijaat - Detail Page.mp4`. |
+| **Names files from real metadata** | JSON-LD, Open Graph, headings and the title are scored (season/episode markers and distinctive words win, site slogans lose): `Dar-E-Nijaat [1080p].mp4`, not `Dar-e-nijaat - Detail Page.mp4`. |
+| **Series aware** | Detects `S01E02`, `1x02`, `Season 1 Episode 2` and lets you edit Show / Season / Episode; names `Show - S01E02.mp4` and can file under `Show\Season 01\`. **Related episodes** found on the page can be caught and downloaded in one batch (each page opened in the background, stream caught, tab closed). |
+| **Smart name (on-device AI)** | Optional: Chrome's built-in Gemini Nano (Prompt API, runs locally) picks the main video among the candidates and proposes title / show / season / episode — never applied without your click. |
+| **Save anywhere** | Per-download folder with recent folders remembered, plus the engine's default folder editable right in the popup. Remove a download from the list or delete the file too. |
 | **Fast direct downloads** | Up to 32 parallel ranged connections per file, resumable state, ETag revalidation. |
 | **Torrents & magnets** | Built-in BitTorrent client (DHT, PEX, UPnP) — paste a magnet link, drop a `.torrent`, or click one in the browser. |
 | **Hard sites** | A yt-dlp resolver handles JavaScript-heavy players and signed URLs when the sniffers can't. |

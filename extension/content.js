@@ -43,8 +43,34 @@
       frames,
     };
   }
+  // Links on the page that look like other episodes/parts of the same series:
+  // text or URL with S01E02 / 1x02 / Episode 3 / ep-4 markers, rel=next/prev,
+  // or a URL that differs from the current one only by a number.
+  const EP_TEXT = /\bS\d{1,2}\s*[ .\-_]?\s*E\d{1,3}\b|\b\d{1,2}x\d{1,3}\b|\bSeason\s*\d{1,2}\b|\bEpisode\s*\d{1,3}\b|\bEp\.?\s*\d{1,3}\b|\bPart\s*\d{1,3}\b/i;
+  const EP_URL = /[\/\-_](?:s\d{1,2}e\d{1,3}|\d{1,2}x\d{1,3}|ep(?:isode)?[\-_]?\d{1,3}|season[\-_]?\d{1,2}[\/\-_]+(?:episode|ep)?[\-_]?\d{1,3}|e\d{1,3})(?=[\/\-_.?#]|$)/i;
+  function relatedLinks() {
+    if (!isTop) return [];
+    const here = location.href.split('#')[0];
+    const hereDigits = here.replace(/\d+/g, '#');
+    const out = [];
+    const seen = new Set([here]);
+    for (const a of document.querySelectorAll('a[href]')) {
+      let href;
+      try { href = new URL(a.getAttribute('href'), location.href).href.split('#')[0]; } catch { continue; }
+      if (!/^https?:/.test(href) || seen.has(href)) continue;
+      const text = (a.innerText || a.getAttribute('title') || a.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+      const rel = (a.getAttribute('rel') || '').toLowerCase();
+      const sameShape = href.replace(/\d+/g, '#') === hereDigits && /\d/.test(href);
+      if (!(EP_TEXT.test(text) || EP_URL.test(href) || rel === 'next' || rel === 'prev' || sameShape)) continue;
+      seen.add(href);
+      out.push({ href, text, rel: rel || undefined });
+      if (out.length >= 80) break;
+    }
+    return out;
+  }
   function snapshotMeta() {
     return {
+      related: relatedLinks(),
       title: document.title || '',
       og: meta('og:title'),
       tw: meta('twitter:title'),

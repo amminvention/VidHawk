@@ -25,6 +25,7 @@
     <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></symbol>
     <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></symbol>
     <symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/></symbol>
+    <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15Z"/></symbol>
     <symbol id="i-settings" viewBox="0 0 24 24"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></symbol>
   </svg>
 
@@ -53,6 +54,11 @@
       <div class="section-head">
         <h2 id="mediaHead">On this page</h2>
         <span class="count" id="mediaCount" aria-live="polite"></span>
+        <span class="spacer"></span>
+        <span id="aiStatus" class="ai-status" aria-live="polite"></span>
+        <button id="aiSuggest" class="btn ghost ai" type="button" title="Let Chrome's on-device model (Gemini Nano) pick the main video and name it" hidden>
+          <svg aria-hidden="true"><use href="#i-sparkle"/></svg><span>Smart name</span>
+        </button>
       </div>
       <ul id="mediaList" class="list" aria-label="Detected media"></ul>
       <details id="staleWrap" class="stale" hidden>
@@ -63,6 +69,24 @@
       <div id="mediaEmpty" class="empty">
         <svg aria-hidden="true"><use href="#i-film"/></svg>
         <p>Nothing caught yet. Play the video, or reload the page with VidHawk open.</p>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="relatedHead" id="relatedSection" hidden>
+      <div class="section-head">
+        <h2 id="relatedHead">Related episodes</h2>
+        <span class="count" id="relatedCount"></span>
+      </div>
+      <div class="row batch-bar">
+        <button id="batchAll" class="btn" type="button" title="Open each page in the background, catch its stream and download it with series naming"><svg aria-hidden="true"><use href="#i-layers"/></svg><span>Catch &amp; download all</span></button>
+        <label class="toggle" title="Download selected episodes only"><input type="checkbox" id="relatedSelectMode" /><span>Select</span></label>
+        <span class="spacer"></span>
+        <button id="relatedToggle" class="link" type="button" aria-expanded="false">Show list</button>
+      </div>
+      <ul id="relatedList" class="list compact" aria-label="Related episode links" hidden></ul>
+      <div id="batchStatus" class="batch" hidden>
+        <div class="row"><span id="batchText" class="note"></span><span class="spacer"></span><button id="batchStop" class="link" type="button">Stop</button><button id="batchClear" class="link" type="button" hidden>Clear</button></div>
+        <div class="bar"><div class="fill" id="batchFill"></div></div>
       </div>
     </section>
 

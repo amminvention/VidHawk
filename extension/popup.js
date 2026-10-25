@@ -129,7 +129,8 @@
     const keys = new Set(Object.keys(tab.items || {}));
     return items
       .filter((i) => !(i.childOf && keys.has(i.childOf)))
-      .sort((a, b) => (b.playing || 0) - (a.playing || 0)
+      .sort((a, b) => Number(b.id === aiPick) - Number(a.id === aiPick)
+        || (b.playing || 0) - (a.playing || 0)
         || Number(isStream(b)) - Number(isStream(a))
         || Number(b.verified) - Number(a.verified)
         || (b.seen || 0) - (a.seen || 0)
@@ -214,8 +215,8 @@
     node.dataset.key = item.id;
     const kind = $('[data-role="kind"]', node);
     kind.textContent = kindLabel(item);
-    kind.className = `kind ${item.kind}${item.verified === false ? ' api' : ''}`;
-    kind.title = item.source === 'api' ? 'Found inside an API response (unverified)' : `Detected via ${item.source || 'network'}`;
+    kind.className = `kind ${item.kind}${item.verified === false ? ' api' : ''}${item.id === aiPick ? ' ai-pick' : ''}`;
+    kind.title = item.id === aiPick ? 'Picked by the on-device model' : item.source === 'api' ? 'Found inside an API response (unverified)' : `Detected via ${item.source || 'network'}`;
 
     const name = $('[data-role="name"]', node);
     name.value = names.get(item.id) ?? suggested.get(item.id) ?? VidHawkNaming.suggestName(item, data.tab.meta, tabUrl);
@@ -299,6 +300,175 @@
       toast(`Failed: ${e.message}`);
     }
   }
+
+  // ------------------------------------------------ on-device AI (Gemini Nano)
+  // Chrome's Prompt API: available to extensions since Chrome 138, runs locally,
+  // hardware-gated, one-time model download with user consent. Heuristics stay
+  // the fallback; the model only proposes, the user still clicks Download.
+  let aiPick = null;
+  const AI_SCHEMA = {
+    type: 'object',
+    properties: {
+      mainIndex: { type: 'integer', description: 'index of the candidate that is the main video of the page' },
+      title: { type: 'string', description: 'clean human title of that video, no site name, no quality tags' },
+      show: { type: 'string' },
+      season: { type: ['integer', 'null'] },
+      episode: { type: ['integer', 'null'] },
+    },
+    required: ['mainIndex', 'title'],
+  };
+  const AI_SYSTEM = 'You help a download manager. Given page metadata and candidate media streams, pick the main video the user is watching and produce a clean file title. Strip site names, slogans, "watch online", quality tags and separators. If it is a series episode, fill show, season and episode numbers. Reply with JSON only.';
+
+  async function aiAvailability() {
+    if (typeof LanguageModel === 'undefined') return 'unsupported';
+    try { return await LanguageModel.availability(); } catch { return 'unsupported'; }
+  }
+  function setAiStatus(text) { $('#aiStatus').textContent = text || ''; }
+  async function initAi() {
+    const a = await aiAvailability();
+    const btn = $('#aiSuggest');
+    btn.hidden = a === 'unsupported' || a === 'unavailable';
+    if (a === 'downloadable') btn.title = 'First use downloads Chrome\'s on-device model (about 2 GB, once).';
+    if (a === 'downloading') setAiStatus('model downloading…');
+  }
+  function aiPromptFor(items) {
+    const m = data.tab?.meta || {};
+    const page = { url: tabUrl, title: m.title, og: m.og, h1: m.h1, h2: m.h2, jsonLd: m.ld };
+    const cands = items.map((it, i) => ({
+      i, kind: it.kind, host: host(it.url), path: (() => { try { return new URL(it.url).pathname.slice(-60); } catch { return ''; } })(),
+      playing: !!it.playing, seen: it.seen || 1, size: it.size || it.probe?.size || null,
+      duration: it.probe?.duration || null, qualities: (it.probe?.variants || []).map((v) => v.label).slice(0, 6),
+    }));
+    return `PAGE: ${JSON.stringify(page)}\nCANDIDATES: ${JSON.stringify(cands)}\nReturn JSON with mainIndex, title, show, season, episode.`;
+  }
+  async function aiSuggest() {
+    const items = visibleItems(data.tab || { items: {} }).filter((i) => !i.stale).slice(0, 12);
+    if (!items.length) return toast('Nothing caught on this page yet');
+    const btn = $('#aiSuggest');
+    btn.disabled = true;
+    setAiStatus('thinking…');
+    let session = null;
+    try {
+      session = await LanguageModel.create({
+        initialPrompts: [{ role: 'system', content: AI_SYSTEM }],
+        monitor(mon) { mon.addEventListener('downloadprogress', (e) => setAiStatus(`downloading model ${Math.round((e.loaded || 0) * 100)}%`)); },
+      });
+      const raw = await session.prompt(aiPromptFor(items), { responseConstraint: AI_SCHEMA });
+      const out = JSON.parse(raw.replace(/^```(?:json)?|```$/g, '').trim());
+      const main = items[Math.max(0, Math.min(items.length - 1, Number(out.mainIndex) || 0))];
+      aiPick = main.id;
+      const ext = isStream(main) ? 'mp4' : main.ext || 'mp4';
+      names.set(main.id, `${VidHawkNaming.sanitize(out.title || VidHawkNaming.stripExt(names.get(main.id) || ''))}.${ext}`);
+      const opt = options.get(main.id);
+      if (opt && out.episode != null) {
+        opt.series = true; opt.show = out.show || opt.show; opt.season = out.season ?? ''; opt.episode = out.episode; opt.detected = true;
+      }
+      setAiStatus('suggested');
+      renderMedia();
+      toast(`Suggested: ${names.get(main.id)}`);
+    } catch (e) {
+      setAiStatus('');
+      toast(`Smart name failed: ${e.message}`);
+    } finally {
+      btn.disabled = false;
+      try { session?.destroy(); } catch {}
+    }
+  }
+  $('#aiSuggest').addEventListener('click', aiSuggest);
+
+  // ------------------------------------------------ related episodes & batch
+  let relatedOpen = false;
+  const relatedSelected = new Set();
+  function relatedEntries() {
+    const links = data.tab?.meta?.related || [];
+    return links.map((l) => ({ ...l, ...(VidHawkNaming.parseEpisode(l.text) || VidHawkNaming.parseEpisode(decodeURIComponent(l.href)) || {}) }))
+      .sort((a, b) => (a.season ?? 99) - (b.season ?? 99) || (a.episode ?? 9999) - (b.episode ?? 9999));
+  }
+  function renderRelated() {
+    const entries = relatedEntries();
+    const section = $('#relatedSection');
+    const batch = data.batch;
+    section.hidden = entries.length === 0 && !batch;
+    $('#relatedCount').textContent = entries.length ? String(entries.length) : '';
+    const list = $('#relatedList');
+    list.hidden = !relatedOpen;
+    $('#relatedToggle').textContent = relatedOpen ? 'Hide list' : 'Show list';
+    $('#relatedToggle').setAttribute('aria-expanded', String(relatedOpen));
+    const selectMode = $('#relatedSelectMode').checked;
+    const statusByHref = new Map((batch?.items || []).map((i) => [i.href, i]));
+    list.replaceChildren(...entries.map((e) => {
+      const li = document.createElement('li');
+      if (selectMode) {
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = relatedSelected.has(e.href);
+        cb.setAttribute('aria-label', `Select ${e.text || e.href}`);
+        cb.addEventListener('change', () => { cb.checked ? relatedSelected.add(e.href) : relatedSelected.delete(e.href); updateBatchButton(); });
+        li.appendChild(cb);
+      }
+      const ep = document.createElement('span');
+      ep.className = 'ep';
+      ep.textContent = e.episode != null ? (e.season != null ? `S${String(e.season).padStart(2, '0')}E${String(e.episode).padStart(2, '0')}` : `E${String(e.episode).padStart(2, '0')}`) : (e.rel || 'link');
+      const txt = document.createElement('span');
+      txt.className = 'txt';
+      txt.textContent = e.text || e.href;
+      txt.title = e.href;
+      li.append(ep, txt);
+      const st = statusByHref.get(e.href);
+      if (st) { const s = document.createElement('span'); s.className = `st ${st.status}`; s.textContent = st.status; s.title = st.error || st.title || ''; li.appendChild(s); }
+      const open = document.createElement('button');
+      open.className = 'icon';
+      open.title = 'Open in a new tab';
+      open.setAttribute('aria-label', 'Open in a new tab');
+      open.innerHTML = '<svg aria-hidden="true"><use href="#i-film"/></svg>';
+      open.addEventListener('click', () => chrome.tabs.create({ url: e.href, active: false }));
+      li.appendChild(open);
+      return li;
+    }));
+    updateBatchButton();
+    const status = $('#batchStatus');
+    status.hidden = !batch;
+    if (batch) {
+      const done = batch.items.filter((i) => i.status === 'queued').length;
+      const failed = batch.items.filter((i) => i.status === 'error').length;
+      const current = batch.items[batch.index];
+      $('#batchText').textContent = batch.finished || batch.stopped
+        ? `Batch ${batch.stopped ? 'stopped' : 'finished'}: ${done} queued, ${failed} failed`
+        : `Catching ${batch.index + 1}/${batch.items.length}${current ? ` — ${current.text || current.href}` : ''} (${done} queued, ${failed} failed)`;
+      $('#batchFill').style.width = `${Math.round((batch.index / Math.max(1, batch.items.length)) * 100)}%`;
+      $('#batchStop').hidden = batch.finished || batch.stopped;
+      $('#batchClear').hidden = !(batch.finished || batch.stopped);
+    }
+  }
+  function updateBatchButton() {
+    const entries = relatedEntries();
+    const selectMode = $('#relatedSelectMode').checked;
+    const n = selectMode ? [...relatedSelected].filter((h) => entries.some((e) => e.href === h)).length : entries.length;
+    const btn = $('#batchAll');
+    btn.querySelector('span').textContent = selectMode ? `Catch & download selected (${n})` : `Catch & download all (${entries.length})`;
+    btn.disabled = !data.engine.connected || n === 0 || !!data.batch?.running;
+  }
+  async function startBatch() {
+    const entries = relatedEntries();
+    const selectMode = $('#relatedSelectMode').checked;
+    const items = (selectMode ? entries.filter((e) => relatedSelected.has(e.href)) : entries).map((e) => ({ href: e.href, text: e.text, season: e.season ?? null, episode: e.episode ?? null }));
+    if (!items.length) return;
+    // Reuse the first stream card's options (show, quality, folder, organise) as batch defaults.
+    const first = visibleItems(data.tab || { items: {} }).find(isStream) || visibleItems(data.tab || { items: {} })[0];
+    const opt = first ? options.get(first.id) : null;
+    const quality = first ? ($(`[data-key="${CSS.escape(first.id)}"] .quality`)?.value || 'best') : 'best';
+    const show = opt?.show || VidHawkNaming.parseEpisode(data.tab?.meta?.h1 || '')?.show || VidHawkNaming.pickTitle(data.tab?.meta, tabUrl) || '';
+    try {
+      await bg('batch-start', { items, show, season: opt?.season === '' ? null : opt?.season ?? null, quality, folder: opt?.folder || '', organize: opt?.organize ?? true });
+      toast(`Catching ${items.length} episodes in the background`);
+      refresh();
+    } catch (e) { toast(`Failed: ${e.message}`); }
+  }
+  $('#batchAll').addEventListener('click', startBatch);
+  $('#relatedToggle').addEventListener('click', () => { relatedOpen = !relatedOpen; renderRelated(); });
+  $('#relatedSelectMode').addEventListener('change', () => { if ($('#relatedSelectMode').checked) relatedOpen = true; renderRelated(); });
+  $('#batchStop').addEventListener('click', async () => { await bg('batch-stop'); refresh(); });
+  $('#batchClear').addEventListener('click', async () => { await bg('batch-clear'); refresh(); });
 
   // --------------------------------------------- browser downloads (tab-independent)
   function renderRecent() {
@@ -429,6 +599,7 @@
     data = await bg('get-tab', { tabId });
     renderEngine();
     renderMedia();
+    renderRelated();
     renderRecent();
     renderJobs();
     $('#takeOver').checked = !!data.settings?.takeOver;
@@ -493,6 +664,7 @@
     tabUrl = tab?.url || '';
     await loadRecentFolders();
     await refresh();
+    initAi();
     if (!data.engine.connected || Date.now() - (data.engine.lastPing || 0) > 30000) {
       data.engine = await bg('ping');
       renderEngine();
