@@ -241,6 +241,8 @@
     node.dataset.key = item.id;
     node._item = item;
     const name = $('[data-role="name"]', node);
+    // Options derive the show name from the suggested file name, so set it first.
+    name.value = names.get(item.id) ?? suggested.get(item.id) ?? VidHawkNaming.suggestName(item, data.tab.meta, tabUrl);
     name.addEventListener('input', () => names.set(node._item.id, name.value));
     const quality = $('[data-role="quality"]', node);
     quality.addEventListener('change', () => qualities.set(node._item.id, quality.value));
